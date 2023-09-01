@@ -26,15 +26,20 @@ func (o *Order) String() string {
 	return fmt.Sprintf("size: %.2f", o.size)
 }
 
+func (o *Order) isFilled() bool {
+	return o.size == float64(0)
+}
+
+// for each price level(limit) we need to know total volume and the corresponding orders
 type Limit struct {
 	price       float64
 	totalVolume float64
 	Orders      []*Order
 }
 
-func NewLimit(price int) *Limit {
+func NewLimit(price float64) *Limit {
 	return &Limit{
-		price:  float64(price),
+		price:  price,
 		Orders: []*Order{},
 	}
 }
@@ -58,17 +63,72 @@ func (l *Limit) DeleteOrder(o *Order) {
 }
 
 type OrderBook struct {
-	asks []Order
-	bids []Order
+	asks           []*Limit
+	bids           []*Limit
+	priceToAsksMap map[float64]*Limit
+	priceToBidsMap map[float64]*Limit
+}
+
+func NewOrderbook() *OrderBook {
+	return &OrderBook{
+		priceToAsksMap: make(map[float64]*Limit),
+		priceToBidsMap: make(map[float64]*Limit),
+	}
+}
+
+// fill at `price`
+func (ob *OrderBook) placeLimitOrder(price float64, o *Order) {
+	var limit *Limit
+
+	// find the limit object with the corresponding price
+	if o.isBid {
+		limit = ob.priceToAsksMap[price]
+	} else {
+		limit = ob.priceToBidsMap[price]
+	}
+	if limit == nil {
+		limit = NewLimit(price)
+		if o.isBid {
+			ob.bids = append(ob.bids, limit)
+			ob.priceToBidsMap[price] = limit
+		} else {
+			ob.asks = append(ob.asks, limit)
+			ob.priceToAsksMap[price] = limit
+		}
+	}
+	limit.AddOrder(o)
+}
+
+// fill at best price
+func (ob *OrderBook) placeMarketOrder(o *Order) []Match {
+	// check if there is enough liquidity
+	if o.isBid && o.size > ob.getTotalVolumeAllAsks() {
+		panic("Not enough ask liquidity")
+	} else if !o.isBid && o.size > ob.getTotalVolumeAllBids() {
+		panic("Not enough ask liquidity")
+	}
+	return nil
 }
 
 func (ob *OrderBook) getTotalVolumeAllBids() float64 {
-	return 0
+	total := float64(0)
+	for _, limit := range ob.bids {
+		total += limit.totalVolume
+	}
+	return total
 }
 
 func (ob *OrderBook) getTotalVolumeAllAsks() float64 {
-	return 0
+	total := float64(0)
+	for _, limit := range ob.asks {
+		total += limit.totalVolume
+	}
+	return total
 }
 
-func (ob *OrderBook) placeMarketOrder() {
+type Match struct {
+	ask        Order
+	bid        Order
+	sizeFilled float64
+	price      float64
 }
