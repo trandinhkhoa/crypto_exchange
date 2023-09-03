@@ -105,8 +105,8 @@ func TestPlaceMarketOrder(t *testing.T) {
 	// 1 ask as before, it's still there with a reduced size since not enough bidder yet
 	assert(t, len(ob.askLimits), 1)
 
-	assert(t, matches[0].ask.timestamp, sellOrder.timestamp)
-	assert(t, matches[0].bid.timestamp, buyOrder.timestamp)
+	assert(t, matches[0].ask, sellOrder)
+	assert(t, matches[0].bid, buyOrder)
 	assert(t, matches[0].price, 10_000.0)
-	// assert(t, buyOrder.IsFilled(), true)
+	assert(t, buyOrder.isFilled(), true)
 }

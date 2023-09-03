@@ -149,8 +149,9 @@ func (ob *OrderBook) placeMarketOrder(incomingOrder *Order) []Match {
 				if incomingOrder.size == 0 {
 					break
 				}
-				func(existingOrder Order, incomingOrder Order) {
+				func(existingOrder *Order, incomingOrder *Order) {
 					if existingOrder.size > incomingOrder.size {
+						limit.totalVolume = limit.totalVolume - incomingOrder.size
 						matchArray = append(matchArray, Match{
 							bid:        incomingOrder,
 							ask:        existingOrder,
@@ -160,6 +161,7 @@ func (ob *OrderBook) placeMarketOrder(incomingOrder *Order) []Match {
 						existingOrder.size = existingOrder.size - incomingOrder.size
 						incomingOrder.size = 0
 					} else if existingOrder.size == incomingOrder.size {
+						limit.totalVolume = limit.totalVolume - incomingOrder.size
 						matchArray = append(matchArray, Match{
 							bid:        incomingOrder,
 							ask:        existingOrder,
@@ -169,6 +171,7 @@ func (ob *OrderBook) placeMarketOrder(incomingOrder *Order) []Match {
 						incomingOrder.size = 0
 						existingOrder.size = 0
 					} else {
+						limit.totalVolume = limit.totalVolume - existingOrder.size
 						matchArray = append(matchArray, Match{
 							bid:        incomingOrder,
 							ask:        existingOrder,
@@ -178,9 +181,8 @@ func (ob *OrderBook) placeMarketOrder(incomingOrder *Order) []Match {
 						incomingOrder.size = incomingOrder.size - existingOrder.size
 						existingOrder.size = 0
 					}
-				}(*order, *incomingOrder)
+				}(order, incomingOrder)
 			}
-			limit.totalVolume = limit.totalVolume - incomingOrder.size
 		}
 	}
 	return matchArray
@@ -203,8 +205,8 @@ func (ob *OrderBook) getTotalVolumeAllAsks() float64 {
 }
 
 type Match struct {
-	ask        Order
-	bid        Order
+	ask        *Order
+	bid        *Order
 	sizeFilled float64
 	price      float64
 }
