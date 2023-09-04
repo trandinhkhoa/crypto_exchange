@@ -64,9 +64,97 @@ func (l *Limit) DeleteOrder(o *Order) {
 	l.totalVolume -= float64(o.size)
 }
 
+func (l *Limit) fill(incomingOrder *Order) []Match {
+	matchArray := make([]Match, 0)
+	for _, existingOrder := range l.Orders {
+
+		if incomingOrder.isFilled() {
+			break
+		}
+		if existingOrder.size >= incomingOrder.size {
+			if incomingOrder.isBid {
+				matchArray = append(matchArray, Match{
+					bid:        incomingOrder,
+					ask:        existingOrder,
+					price:      l.price,
+					sizeFilled: incomingOrder.size,
+				})
+			} else {
+				matchArray = append(matchArray, Match{
+					bid:        existingOrder,
+					ask:        incomingOrder,
+					price:      l.price,
+					sizeFilled: incomingOrder.size,
+				})
+			}
+			l.totalVolume = l.totalVolume - incomingOrder.size
+			existingOrder.size = existingOrder.size - incomingOrder.size
+			incomingOrder.size = 0
+		} else {
+			if incomingOrder.isBid {
+				matchArray = append(matchArray, Match{
+					bid:        incomingOrder,
+					ask:        existingOrder,
+					price:      l.price,
+					sizeFilled: existingOrder.size,
+				})
+			} else {
+				matchArray = append(matchArray, Match{
+					bid:        existingOrder,
+					ask:        incomingOrder,
+					price:      l.price,
+					sizeFilled: existingOrder.size,
+				})
+			}
+			l.totalVolume = l.totalVolume - existingOrder.size
+			incomingOrder.size = incomingOrder.size - existingOrder.size
+			existingOrder.size = 0
+			l.DeleteOrder(existingOrder)
+		}
+	}
+	return matchArray
+}
+
+// ob.askLimits should be sorted according to limit price
+type AskLimitsInterface []*Limit
+
+func (ls AskLimitsInterface) Less(a int, b int) bool {
+	if ls[a].price < ls[b].price {
+		return true
+	} else {
+		return false
+	}
+}
+
+func (ls AskLimitsInterface) Swap(a int, b int) {
+	ls[a], ls[b] = ls[b], ls[a]
+}
+
+func (ls AskLimitsInterface) Len() int {
+	return len(ls)
+}
+
+type BidLimitsInterface []*Limit
+
+func (ls BidLimitsInterface) Less(a int, b int) bool {
+	if ls[a].price > ls[b].price {
+		return true
+	} else {
+		return false
+	}
+}
+
+func (ls BidLimitsInterface) Swap(a int, b int) {
+	ls[a], ls[b] = ls[b], ls[a]
+}
+
+func (ls BidLimitsInterface) Len() int {
+	return len(ls)
+}
+
 type OrderBook struct {
-	askLimits      LimitsInterface
-	bidLimits      []*Limit
+	askLimits      AskLimitsInterface
+	bidLimits      BidLimitsInterface
 	priceToAsksMap map[float64]*Limit
 	priceToBidsMap map[float64]*Limit
 }
@@ -78,34 +166,15 @@ func NewOrderbook() *OrderBook {
 	}
 }
 
-// ob.askLimits should be sorted according to limit price
-type LimitsInterface []*Limit
-
-func (ls LimitsInterface) Less(a int, b int) bool {
-	if ls[a].price < ls[b].price {
-		return true
-	} else {
-		return false
-	}
-}
-
-func (ls LimitsInterface) Swap(a int, b int) {
-	ls[a], ls[b] = ls[b], ls[a]
-}
-
-func (ls LimitsInterface) Len() int {
-	return len(ls)
-}
-
 // fill at `price`
 func (ob *OrderBook) placeLimitOrder(price float64, o *Order) {
 	var limit *Limit
 
 	// find the limit object with the corresponding price
 	if o.isBid {
-		limit = ob.priceToAsksMap[price]
-	} else {
 		limit = ob.priceToBidsMap[price]
+	} else {
+		limit = ob.priceToAsksMap[price]
 	}
 	if limit == nil {
 		limit = NewLimit(price)
@@ -120,13 +189,14 @@ func (ob *OrderBook) placeLimitOrder(price float64, o *Order) {
 	limit.AddOrder(o)
 }
 
-func fill(o1 *Order, o2 *Order) {
-
-}
-
 func (ob *OrderBook) sortAskLimits() {
 	// sort.Sort takes in as argument that implement a certain interface.
 	sort.Sort(ob.askLimits)
+}
+
+func (ob *OrderBook) sortBidLimits() {
+	// sort.Sort takes in as argument that implement a certain interface.
+	sort.Sort(ob.bidLimits)
 }
 
 // fill at best price
@@ -145,43 +215,32 @@ func (ob *OrderBook) placeMarketOrder(incomingOrder *Order) []Match {
 		ob.sortAskLimits()
 		for _, limit := range ob.askLimits {
 			// inside a limit, orders should be sorted according to timestamp
-			for _, order := range limit.Orders {
-				if incomingOrder.size == 0 {
-					break
-				}
-				func(existingOrder *Order, incomingOrder *Order) {
-					if existingOrder.size > incomingOrder.size {
-						limit.totalVolume = limit.totalVolume - incomingOrder.size
-						matchArray = append(matchArray, Match{
-							bid:        incomingOrder,
-							ask:        existingOrder,
-							price:      limit.price,
-							sizeFilled: incomingOrder.size,
-						})
-						existingOrder.size = existingOrder.size - incomingOrder.size
-						incomingOrder.size = 0
-					} else if existingOrder.size == incomingOrder.size {
-						limit.totalVolume = limit.totalVolume - incomingOrder.size
-						matchArray = append(matchArray, Match{
-							bid:        incomingOrder,
-							ask:        existingOrder,
-							price:      limit.price,
-							sizeFilled: incomingOrder.size,
-						})
-						incomingOrder.size = 0
-						existingOrder.size = 0
-					} else {
-						limit.totalVolume = limit.totalVolume - existingOrder.size
-						matchArray = append(matchArray, Match{
-							bid:        incomingOrder,
-							ask:        existingOrder,
-							price:      limit.price,
-							sizeFilled: existingOrder.size,
-						})
-						incomingOrder.size = incomingOrder.size - existingOrder.size
-						existingOrder.size = 0
+			matchArray = append(matchArray, limit.fill(incomingOrder)...)
+			if len(limit.Orders) == 0 {
+				delete(ob.priceToAsksMap, limit.price)
+				for index, toBeDeletedLimit := range ob.askLimits {
+					if toBeDeletedLimit.price == limit.price {
+						ob.askLimits[index] = ob.askLimits[len(ob.askLimits)-1]
+						ob.askLimits = ob.askLimits[:len(ob.askLimits)-1]
+						break
 					}
-				}(order, incomingOrder)
+				}
+			}
+		}
+	} else {
+		ob.sortBidLimits()
+		for _, limit := range ob.bidLimits {
+			// inside a limit, orders should be sorted according to timestamp
+			matchArray = append(matchArray, limit.fill(incomingOrder)...)
+			if len(limit.Orders) == 0 {
+				delete(ob.priceToBidsMap, limit.price)
+				for index, toBeDeletedLimit := range ob.bidLimits {
+					if toBeDeletedLimit.price == limit.price {
+						ob.bidLimits[index] = ob.bidLimits[len(ob.bidLimits)-1]
+						ob.bidLimits = ob.bidLimits[:len(ob.bidLimits)-1]
+						break
+					}
+				}
 			}
 		}
 	}

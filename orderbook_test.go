@@ -33,7 +33,7 @@ func TestLimit(t *testing.T) {
 	assert(t, l.Orders[1].size, float64(10))
 }
 
-func TestOrderBookGetTotalVolumeAllAsks(t *testing.T) {
+func TestOrderBookPlaceLimitOrder(t *testing.T) {
 	ob := NewOrderbook()
 
 	sellOrder := NewOrder(false, 20)
@@ -42,12 +42,17 @@ func TestOrderBookGetTotalVolumeAllAsks(t *testing.T) {
 	sellOrder = NewOrder(false, 30)
 	ob.placeLimitOrder(20_000, sellOrder)
 
-	assert(t, ob.getTotalVolumeAllAsks(), float64(50))
+	sellOrder = NewOrder(false, 50)
+	ob.placeLimitOrder(20_000, sellOrder)
+
+	assert(t, ob.askLimits.Len(), 2)
+	assert(t, len(ob.priceToAsksMap), 2)
+	assert(t, ob.getTotalVolumeAllAsks(), float64(100))
 }
 
 func TestLimitsInterface(t *testing.T) {
 	var orderbook OrderBook
-	orderbook.askLimits = make(LimitsInterface, 0)
+	orderbook.askLimits = make(AskLimitsInterface, 0)
 	limit1 := NewLimit(10000)
 	orderbook.askLimits = append(orderbook.askLimits, limit1)
 	limit2 := NewLimit(20000)
@@ -85,7 +90,7 @@ func TestPlaceMarketOrderNotEnoughLiquidity(t *testing.T) {
 	ob.placeMarketOrder(buyOrder)
 }
 
-func TestPlaceMarketOrder(t *testing.T) {
+func TestPlaceMarketOrderBid(t *testing.T) {
 	ob := NewOrderbook()
 
 	// ask
@@ -109,4 +114,50 @@ func TestPlaceMarketOrder(t *testing.T) {
 	assert(t, matches[0].bid, buyOrder)
 	assert(t, matches[0].price, 10_000.0)
 	assert(t, buyOrder.isFilled(), true)
+}
+
+func TestPlaceMarketOrderAskMultiFill(t *testing.T) {
+	ob := NewOrderbook()
+
+	// bid
+	buyOrder0 := NewOrder(true, 25)
+	ob.placeLimitOrder(5_000, buyOrder0)
+	buyOrder1 := NewOrder(true, 10)
+	ob.placeLimitOrder(15_000, buyOrder1)
+	buyOrder2 := NewOrder(true, 15)
+	ob.placeLimitOrder(10_000, buyOrder2)
+	buyOrder3 := NewOrder(true, 20)
+	ob.placeLimitOrder(10_000, buyOrder3)
+
+	// ask
+	sellOrder := NewOrder(false, 30)
+	matches := ob.placeMarketOrder(sellOrder)
+
+	assert(t, len(matches), 3)
+
+	// the smaller one is filled first
+	assert(t, matches[0].sizeFilled, 10.0)
+	assert(t, matches[1].sizeFilled, 15.0)
+	assert(t, matches[2].sizeFilled, 5.0)
+	// the bigger one is partially filled
+	assert(t, ob.getTotalVolumeAllBids(), 40.0)
+	// 2 bid: 1 whose size reduced from 20 to 5, 1 untouched of size 25
+	assert(t, len(ob.bidLimits), 2)
+
+	assert(t, matches[0].ask, sellOrder)
+	assert(t, matches[0].bid, buyOrder1)
+	assert(t, matches[0].price, 15_000.0)
+	assert(t, matches[0].sizeFilled, 10.0)
+
+	assert(t, matches[1].ask, sellOrder)
+	assert(t, matches[1].bid, buyOrder2)
+	assert(t, matches[1].price, 10_000.0)
+	assert(t, matches[1].sizeFilled, 15.0)
+
+	assert(t, matches[2].ask, sellOrder)
+	assert(t, matches[2].bid, buyOrder3)
+	assert(t, matches[2].price, 10_000.0)
+	assert(t, matches[2].sizeFilled, 5.0)
+
+	assert(t, sellOrder.isFilled(), true)
 }
