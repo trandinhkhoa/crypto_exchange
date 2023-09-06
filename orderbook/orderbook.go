@@ -1,4 +1,4 @@
-package main
+package orderbook
 
 import (
 	"fmt"
@@ -153,37 +153,37 @@ func (ls BidLimitsInterface) Len() int {
 }
 
 type OrderBook struct {
-	askLimits      AskLimitsInterface
-	bidLimits      BidLimitsInterface
-	priceToAsksMap map[float64]*Limit
-	priceToBidsMap map[float64]*Limit
+	AskLimits      AskLimitsInterface
+	BidLimits      BidLimitsInterface
+	PriceToAsksMap map[float64]*Limit
+	PriceToBidsMap map[float64]*Limit
 }
 
 func NewOrderbook() *OrderBook {
 	return &OrderBook{
-		priceToAsksMap: make(map[float64]*Limit),
-		priceToBidsMap: make(map[float64]*Limit),
+		PriceToAsksMap: make(map[float64]*Limit),
+		PriceToBidsMap: make(map[float64]*Limit),
 	}
 }
 
 // fill at `price`
-func (ob *OrderBook) placeLimitOrder(price float64, o *Order) {
+func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
 	var limit *Limit
 
 	// find the limit object with the corresponding price
 	if o.isBid {
-		limit = ob.priceToBidsMap[price]
+		limit = ob.PriceToBidsMap[price]
 	} else {
-		limit = ob.priceToAsksMap[price]
+		limit = ob.PriceToAsksMap[price]
 	}
 	if limit == nil {
 		limit = NewLimit(price)
 		if o.isBid {
-			ob.bidLimits = append(ob.bidLimits, limit)
-			ob.priceToBidsMap[price] = limit
+			ob.BidLimits = append(ob.BidLimits, limit)
+			ob.PriceToBidsMap[price] = limit
 		} else {
-			ob.askLimits = append(ob.askLimits, limit)
-			ob.priceToAsksMap[price] = limit
+			ob.AskLimits = append(ob.AskLimits, limit)
+			ob.PriceToAsksMap[price] = limit
 		}
 	}
 	limit.AddOrder(o)
@@ -191,16 +191,16 @@ func (ob *OrderBook) placeLimitOrder(price float64, o *Order) {
 
 func (ob *OrderBook) sortAskLimits() {
 	// sort.Sort takes in as argument that implement a certain interface.
-	sort.Sort(ob.askLimits)
+	sort.Sort(ob.AskLimits)
 }
 
 func (ob *OrderBook) sortBidLimits() {
 	// sort.Sort takes in as argument that implement a certain interface.
-	sort.Sort(ob.bidLimits)
+	sort.Sort(ob.BidLimits)
 }
 
 // fill at best price
-func (ob *OrderBook) placeMarketOrder(incomingOrder *Order) []Match {
+func (ob *OrderBook) PlaceMarketOrder(incomingOrder *Order) []Match {
 	// check if there is enough liquidity
 	if incomingOrder.isBid && incomingOrder.size > ob.getTotalVolumeAllAsks() {
 		panic("Not enough ask liquidity")
@@ -213,15 +213,15 @@ func (ob *OrderBook) placeMarketOrder(incomingOrder *Order) []Match {
 	if incomingOrder.isBid {
 		// ob.ask should be sorted according to limit price
 		ob.sortAskLimits()
-		for _, limit := range ob.askLimits {
+		for _, limit := range ob.AskLimits {
 			// inside a limit, orders should be sorted according to timestamp
 			matchArray = append(matchArray, limit.fill(incomingOrder)...)
 			if len(limit.Orders) == 0 {
-				delete(ob.priceToAsksMap, limit.price)
-				for index, toBeDeletedLimit := range ob.askLimits {
+				delete(ob.PriceToAsksMap, limit.price)
+				for index, toBeDeletedLimit := range ob.AskLimits {
 					if toBeDeletedLimit.price == limit.price {
-						ob.askLimits[index] = ob.askLimits[len(ob.askLimits)-1]
-						ob.askLimits = ob.askLimits[:len(ob.askLimits)-1]
+						ob.AskLimits[index] = ob.AskLimits[len(ob.AskLimits)-1]
+						ob.AskLimits = ob.AskLimits[:len(ob.AskLimits)-1]
 						break
 					}
 				}
@@ -229,15 +229,15 @@ func (ob *OrderBook) placeMarketOrder(incomingOrder *Order) []Match {
 		}
 	} else {
 		ob.sortBidLimits()
-		for _, limit := range ob.bidLimits {
+		for _, limit := range ob.BidLimits {
 			// inside a limit, orders should be sorted according to timestamp
 			matchArray = append(matchArray, limit.fill(incomingOrder)...)
 			if len(limit.Orders) == 0 {
-				delete(ob.priceToBidsMap, limit.price)
-				for index, toBeDeletedLimit := range ob.bidLimits {
+				delete(ob.PriceToBidsMap, limit.price)
+				for index, toBeDeletedLimit := range ob.BidLimits {
 					if toBeDeletedLimit.price == limit.price {
-						ob.bidLimits[index] = ob.bidLimits[len(ob.bidLimits)-1]
-						ob.bidLimits = ob.bidLimits[:len(ob.bidLimits)-1]
+						ob.BidLimits[index] = ob.BidLimits[len(ob.BidLimits)-1]
+						ob.BidLimits = ob.BidLimits[:len(ob.BidLimits)-1]
 						break
 					}
 				}
@@ -249,7 +249,7 @@ func (ob *OrderBook) placeMarketOrder(incomingOrder *Order) []Match {
 
 func (ob *OrderBook) getTotalVolumeAllBids() float64 {
 	total := float64(0)
-	for _, limit := range ob.bidLimits {
+	for _, limit := range ob.BidLimits {
 		total += limit.totalVolume
 	}
 	return total
@@ -257,7 +257,7 @@ func (ob *OrderBook) getTotalVolumeAllBids() float64 {
 
 func (ob *OrderBook) getTotalVolumeAllAsks() float64 {
 	total := float64(0)
-	for _, limit := range ob.askLimits {
+	for _, limit := range ob.AskLimits {
 		total += limit.totalVolume
 	}
 	return total

@@ -1,7 +1,7 @@
 package main
 
-import "fmt"
+import "github.com/trandinhkhoa/crypto-exchange/server"
 
 func main() {
-	fmt.Println("Hello World")
+	server.StartServer()
 }

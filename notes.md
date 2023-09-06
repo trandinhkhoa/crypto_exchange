@@ -49,3 +49,14 @@ orderbook = list of ask + list of bids + need a way to see which order is at a c
 
 - market maker: provide liquidity at all times to an exchange
 match = match ask against a bid, keep track of the size being filled (10 btc ask against 4 btc bid -> need to find match for the remaining 6)
+- how to determine price when your exchange boot up the first time ?
+    - aggregate the orderbook of other exchanges
+
+
+- vscode: debug running server:
+    - choose debug: "create launch.json" -> "Attach to Process:
+    - click on debug -> search for process name (not necessarily the process id) .e.g "exchange"
+- Go :
+    - FAQ: Should I check go.sum into git?
+        - https://twitter.com/FiloSottile/status/1029404663358087173
+        - Generally yes. With it, anyone with your sources doesn't have to trust other GitHub repositories and custom import path owners. Something better is coming, but in the meantime it's the same model as hashes in lock files.

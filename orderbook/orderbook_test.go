@@ -1,4 +1,4 @@
-package main
+package orderbook
 
 import (
 	"reflect"
@@ -37,39 +37,39 @@ func TestOrderBookPlaceLimitOrder(t *testing.T) {
 	ob := NewOrderbook()
 
 	sellOrder := NewOrder(false, 20)
-	ob.placeLimitOrder(10_000, sellOrder)
+	ob.PlaceLimitOrder(10_000, sellOrder)
 
 	sellOrder = NewOrder(false, 30)
-	ob.placeLimitOrder(20_000, sellOrder)
+	ob.PlaceLimitOrder(20_000, sellOrder)
 
 	sellOrder = NewOrder(false, 50)
-	ob.placeLimitOrder(20_000, sellOrder)
+	ob.PlaceLimitOrder(20_000, sellOrder)
 
-	assert(t, ob.askLimits.Len(), 2)
-	assert(t, len(ob.priceToAsksMap), 2)
+	assert(t, ob.AskLimits.Len(), 2)
+	assert(t, len(ob.PriceToAsksMap), 2)
 	assert(t, ob.getTotalVolumeAllAsks(), float64(100))
 }
 
 func TestLimitsInterface(t *testing.T) {
 	var orderbook OrderBook
-	orderbook.askLimits = make(AskLimitsInterface, 0)
+	orderbook.AskLimits = make(AskLimitsInterface, 0)
 	limit1 := NewLimit(10000)
-	orderbook.askLimits = append(orderbook.askLimits, limit1)
+	orderbook.AskLimits = append(orderbook.AskLimits, limit1)
 	limit2 := NewLimit(20000)
-	orderbook.askLimits = append(orderbook.askLimits, limit2)
+	orderbook.AskLimits = append(orderbook.AskLimits, limit2)
 
-	assert(t, orderbook.askLimits.Len(), 2)
-	assert(t, orderbook.askLimits[0].price, float64(10000))
-	assert(t, orderbook.askLimits[1].price, float64(20000))
-	orderbook.askLimits.Swap(0, 1)
-	assert(t, orderbook.askLimits[0].price, float64(20000))
-	assert(t, orderbook.askLimits[1].price, float64(10000))
+	assert(t, orderbook.AskLimits.Len(), 2)
+	assert(t, orderbook.AskLimits[0].price, float64(10000))
+	assert(t, orderbook.AskLimits[1].price, float64(20000))
+	orderbook.AskLimits.Swap(0, 1)
+	assert(t, orderbook.AskLimits[0].price, float64(20000))
+	assert(t, orderbook.AskLimits[1].price, float64(10000))
 	limit3 := NewLimit(30000)
-	orderbook.askLimits = append(orderbook.askLimits, limit3)
+	orderbook.AskLimits = append(orderbook.AskLimits, limit3)
 	orderbook.sortAskLimits()
-	assert(t, orderbook.askLimits[0].price, float64(10000))
-	assert(t, orderbook.askLimits[1].price, float64(20000))
-	assert(t, orderbook.askLimits[2].price, float64(30000))
+	assert(t, orderbook.AskLimits[0].price, float64(10000))
+	assert(t, orderbook.AskLimits[1].price, float64(20000))
+	assert(t, orderbook.AskLimits[2].price, float64(30000))
 }
 
 func TestPlaceMarketOrderNotEnoughLiquidity(t *testing.T) {
@@ -83,11 +83,11 @@ func TestPlaceMarketOrderNotEnoughLiquidity(t *testing.T) {
 
 	// ask
 	sellOrder := NewOrder(false, 20)
-	ob.placeLimitOrder(10_000, sellOrder)
+	ob.PlaceLimitOrder(10_000, sellOrder)
 
 	// bid
 	buyOrder := NewOrder(true, 400)
-	ob.placeMarketOrder(buyOrder)
+	ob.PlaceMarketOrder(buyOrder)
 }
 
 func TestPlaceMarketOrderBid(t *testing.T) {
@@ -95,11 +95,11 @@ func TestPlaceMarketOrderBid(t *testing.T) {
 
 	// ask
 	sellOrder := NewOrder(false, 20)
-	ob.placeLimitOrder(10_000, sellOrder)
+	ob.PlaceLimitOrder(10_000, sellOrder)
 
 	// bid
 	buyOrder := NewOrder(true, 4)
-	matches := ob.placeMarketOrder(buyOrder)
+	matches := ob.PlaceMarketOrder(buyOrder)
 
 	assert(t, len(matches), 1)
 
@@ -108,7 +108,7 @@ func TestPlaceMarketOrderBid(t *testing.T) {
 	// the bigger one is partially filled
 	assert(t, ob.getTotalVolumeAllAsks(), 16.0)
 	// 1 ask as before, it's still there with a reduced size since not enough bidder yet
-	assert(t, len(ob.askLimits), 1)
+	assert(t, len(ob.AskLimits), 1)
 
 	assert(t, matches[0].ask, sellOrder)
 	assert(t, matches[0].bid, buyOrder)
@@ -121,17 +121,17 @@ func TestPlaceMarketOrderAskMultiFill(t *testing.T) {
 
 	// bid
 	buyOrder0 := NewOrder(true, 25)
-	ob.placeLimitOrder(5_000, buyOrder0)
+	ob.PlaceLimitOrder(5_000, buyOrder0)
 	buyOrder1 := NewOrder(true, 10)
-	ob.placeLimitOrder(15_000, buyOrder1)
+	ob.PlaceLimitOrder(15_000, buyOrder1)
 	buyOrder2 := NewOrder(true, 15)
-	ob.placeLimitOrder(10_000, buyOrder2)
+	ob.PlaceLimitOrder(10_000, buyOrder2)
 	buyOrder3 := NewOrder(true, 20)
-	ob.placeLimitOrder(10_000, buyOrder3)
+	ob.PlaceLimitOrder(10_000, buyOrder3)
 
 	// ask
 	sellOrder := NewOrder(false, 30)
-	matches := ob.placeMarketOrder(sellOrder)
+	matches := ob.PlaceMarketOrder(sellOrder)
 
 	assert(t, len(matches), 3)
 
@@ -142,7 +142,7 @@ func TestPlaceMarketOrderAskMultiFill(t *testing.T) {
 	// the bigger one is partially filled
 	assert(t, ob.getTotalVolumeAllBids(), 40.0)
 	// 2 bid: 1 whose size reduced from 20 to 5, 1 untouched of size 25
-	assert(t, len(ob.bidLimits), 2)
+	assert(t, len(ob.BidLimits), 2)
 
 	assert(t, matches[0].ask, sellOrder)
 	assert(t, matches[0].bid, buyOrder1)
