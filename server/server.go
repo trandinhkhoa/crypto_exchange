@@ -5,11 +5,19 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/trandinhkhoa/crypto-exchange/orderbook"
 )
+
+type OrderBookData struct {
+	TotalAsksVolume float64
+	TotalBidsVolume float64
+	Asks            []*orderbook.Order
+	Bids            []*orderbook.Order
+}
 
 type OrderType string
 
@@ -59,32 +67,50 @@ func (ex *Exchange) handlePlaceOrder(c echo.Context) error {
 		return c.JSON(200, map[string]any{"matches": matches})
 	} else {
 		ex.orderbooks[placeOrderData.Market].PlaceLimitOrder(placeOrderData.Price, incomingOrder)
-		return c.JSON(200, map[string]any{"msg": "limit order placed"})
+		return c.JSON(200, map[string]interface{}{
+			"msg":   "limit order placed",
+			"order": incomingOrder,
+		})
 	}
 }
 
-func handleGetTrades(c echo.Context) error {
-	resp := "handleGetTrades"
-	return c.JSON(200, resp)
+func (ex *Exchange) handleGetBook(c echo.Context) error {
+	marketType := MarketType(c.Param("market"))
+	orderBookData := OrderBookData{
+		TotalAsksVolume: 0.0,
+		TotalBidsVolume: 0.0,
+		Asks:            make([]*orderbook.Order, 0),
+		Bids:            make([]*orderbook.Order, 0),
+	}
+
+	for _, iterator := range ex.orderbooks[marketType].AskLimits {
+		orderBookData.Asks = append(orderBookData.Asks, iterator.Orders...)
+	}
+	for _, iterator := range ex.orderbooks[marketType].BidLimits {
+		orderBookData.Bids = append(orderBookData.Bids, iterator.Orders...)
+	}
+	orderBookData.TotalAsksVolume += ex.orderbooks[marketType].GetTotalVolumeAllAsks()
+	orderBookData.TotalBidsVolume += ex.orderbooks[marketType].GetTotalVolumeAllBids()
+
+	return c.JSON(200, orderBookData)
 }
-func handleGetOrders(c echo.Context) error {
-	resp := "handleGetOrders"
-	return c.JSON(200, resp)
-}
-func handleGetBook(c echo.Context) error {
-	resp := "handleGetBook"
-	return c.JSON(200, resp)
-}
-func handleGetBestBid(c echo.Context) error {
-	resp := "handleGetBestBid"
-	return c.JSON(200, resp)
-}
-func handleGetBestAsk(c echo.Context) error {
-	resp := "handleGetBestAsk"
-	return c.JSON(200, resp)
-}
-func handleCancelOrder(c echo.Context) error {
+
+func (ex *Exchange) handleCancelOrder(c echo.Context) error {
 	resp := "handleCancelOrder"
+	cancelledOrderID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		// ... handle error
+		// TODO: check if this is executed
+		return err
+	}
+	// for now, assuming we will only ever have 1 market ETH
+	order, ok := ex.orderbooks[ETHMarketType].IDToOrderMap[cancelledOrderID]
+	if ok {
+		ex.orderbooks[ETHMarketType].CancelOrder(order)
+	} else {
+		// TODO: check if this is executed
+		panic("order not found")
+	}
 	return c.JSON(200, resp)
 }
 
@@ -147,13 +173,9 @@ func StartServer() {
 
 	e.POST("/order", ex.handlePlaceOrder)
 
-	e.GET("/trades/:market", handleGetTrades)
-	e.GET("/order/:userID", handleGetOrders)
-	e.GET("/book/:market", handleGetBook)
-	e.GET("/book/:market/bid", handleGetBestBid)
-	e.GET("/book/:market/ask", handleGetBestAsk)
+	e.GET("/book/:market", ex.handleGetBook)
 
-	e.DELETE("/order/:id", handleCancelOrder)
+	e.DELETE("/order/:id", ex.handleCancelOrder)
 
 	e.Start(":3000")
 }

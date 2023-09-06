@@ -60,3 +60,5 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
     - FAQ: Should I check go.sum into git?
         - https://twitter.com/FiloSottile/status/1029404663358087173
         - Generally yes. With it, anyone with your sources doesn't have to trust other GitHub repositories and custom import path owners. Something better is coming, but in the meantime it's the same model as hashes in lock files.
+- makers:
+    - "make" liquidity by providing orders for others to trade against.

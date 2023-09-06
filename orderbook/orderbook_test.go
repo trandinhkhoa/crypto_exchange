@@ -29,8 +29,8 @@ func TestLimit(t *testing.T) {
 	assert(t, l.price, float64(10_000))
 	assert(t, l.totalVolume, float64(15))
 	assert(t, len(l.Orders), 2)
-	assert(t, l.Orders[0].size, float64(5))
-	assert(t, l.Orders[1].size, float64(10))
+	assert(t, l.Orders[0].Size, float64(5))
+	assert(t, l.Orders[1].Size, float64(10))
 }
 
 func TestOrderBookPlaceLimitOrder(t *testing.T) {
@@ -47,7 +47,7 @@ func TestOrderBookPlaceLimitOrder(t *testing.T) {
 
 	assert(t, ob.AskLimits.Len(), 2)
 	assert(t, len(ob.PriceToAsksMap), 2)
-	assert(t, ob.getTotalVolumeAllAsks(), float64(100))
+	assert(t, ob.GetTotalVolumeAllAsks(), float64(100))
 }
 
 func TestLimitsInterface(t *testing.T) {
@@ -106,7 +106,7 @@ func TestPlaceMarketOrderBid(t *testing.T) {
 	// the smaller one is filled first
 	assert(t, matches[0].sizeFilled, 4.0)
 	// the bigger one is partially filled
-	assert(t, ob.getTotalVolumeAllAsks(), 16.0)
+	assert(t, ob.GetTotalVolumeAllAsks(), 16.0)
 	// 1 ask as before, it's still there with a reduced size since not enough bidder yet
 	assert(t, len(ob.AskLimits), 1)
 
@@ -140,7 +140,7 @@ func TestPlaceMarketOrderAskMultiFill(t *testing.T) {
 	assert(t, matches[1].sizeFilled, 15.0)
 	assert(t, matches[2].sizeFilled, 5.0)
 	// the bigger one is partially filled
-	assert(t, ob.getTotalVolumeAllBids(), 40.0)
+	assert(t, ob.GetTotalVolumeAllBids(), 40.0)
 	// 2 bid: 1 whose size reduced from 20 to 5, 1 untouched of size 25
 	assert(t, len(ob.BidLimits), 2)
 
