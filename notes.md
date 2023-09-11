@@ -60,5 +60,31 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
     - FAQ: Should I check go.sum into git?
         - https://twitter.com/FiloSottile/status/1029404663358087173
         - Generally yes. With it, anyone with your sources doesn't have to trust other GitHub repositories and custom import path owners. Something better is coming, but in the meantime it's the same model as hashes in lock files.
+    - goroutines
+        - channel vs routine
+            - channels: for communication between goroutines
+            - mutex: for case where you dont care about communication and just want to make sure only one goroutine can access a variable at a time to avoid conflicts
+    - in Go, when you create a new instance of a struct using &OrderData{...}, you're allocating memory for that struct on the heap. This memory will remain valid and won't be garbage collected as long as there's a reference to it. In your case, the reference is maintained in the orderBookData.Bids slice.
+        - Once you exit the code block, the local variable orderData goes out of scope, but the memory it points to is still valid because the orderBookData.Bids slice holds a reference to it.
+```
+	for _, iterator := range ex.orderbooks[marketType].BidLimits {
+		for _, order := range iterator.Orders {
+			orderData := &OrderData{
+				ID:        order.ID,
+				IsBid:     order.IsBid,
+				Size:      order.Size,
+				Price:     order.Limit.Price,
+				Timestamp: order.Timestamp,
+			}
+			orderBookData.Bids = append(orderBookData.Bids, orderData)
+		}
+	}
+	orderBookData.TotalAsksVolume += ex.orderbooks[marketType].GetTotalVolumeAllAsks()
+	orderBookData.TotalBidsVolume += ex.orderbooks[marketType].GetTotalVolumeAllBids()
+
+	return c.JSON(200, orderBookData)
+```
+
+
 - makers:
     - "make" liquidity by providing orders for others to trade against.

@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type Order struct {
@@ -12,6 +15,7 @@ type Order struct {
 	ID        int
 	IsBid     bool
 	Size      float64
+	Price     float64
 	limit     *Limit
 	Timestamp int64
 }
@@ -37,23 +41,24 @@ func (o *Order) isFilled() bool {
 
 // for each price level(limit) we need to know total volume and the corresponding orders
 type Limit struct {
-	price       float64
-	totalVolume float64
+	Price       float64
+	TotalVolume float64
 	// uppercase O for Order Springer
 	Orders []*Order
 }
 
 func NewLimit(price float64) *Limit {
 	return &Limit{
-		price:  price,
+		Price:  price,
 		Orders: []*Order{},
 	}
 }
 
 func (l *Limit) AddOrder(o *Order) {
 	o.limit = l
+	o.Price = l.Price
 	l.Orders = append(l.Orders, o)
-	l.totalVolume += float64(o.Size)
+	l.TotalVolume += float64(o.Size)
 }
 
 func (l *Limit) DeleteOrder(o *Order) {
@@ -65,7 +70,7 @@ func (l *Limit) DeleteOrder(o *Order) {
 		}
 	}
 	// remove the size of the deleted order from the total volume
-	l.totalVolume -= float64(o.Size)
+	l.TotalVolume -= float64(o.Size)
 }
 
 func (l *Limit) fill(incomingOrder *Order) []Match {
@@ -78,41 +83,43 @@ func (l *Limit) fill(incomingOrder *Order) []Match {
 		if existingOrder.Size >= incomingOrder.Size {
 			if incomingOrder.IsBid {
 				matchArray = append(matchArray, Match{
-					bid:        incomingOrder,
-					ask:        existingOrder,
-					price:      l.price,
-					sizeFilled: incomingOrder.Size,
+					BidID:      incomingOrder.ID,
+					AskID:      existingOrder.ID,
+					Price:      l.Price,
+					SizeFilled: incomingOrder.Size,
 				})
 			} else {
 				matchArray = append(matchArray, Match{
-					bid:        existingOrder,
-					ask:        incomingOrder,
-					price:      l.price,
-					sizeFilled: incomingOrder.Size,
+					BidID:      existingOrder.ID,
+					AskID:      incomingOrder.ID,
+					Price:      l.Price,
+					SizeFilled: incomingOrder.Size,
 				})
 			}
-			l.totalVolume = l.totalVolume - incomingOrder.Size
+			l.TotalVolume = l.TotalVolume - incomingOrder.Size
 			existingOrder.Size = existingOrder.Size - incomingOrder.Size
 			incomingOrder.Size = 0
 		} else {
 			if incomingOrder.IsBid {
 				matchArray = append(matchArray, Match{
-					bid:        incomingOrder,
-					ask:        existingOrder,
-					price:      l.price,
-					sizeFilled: existingOrder.Size,
+					BidID:      incomingOrder.ID,
+					AskID:      existingOrder.ID,
+					Price:      l.Price,
+					SizeFilled: existingOrder.Size,
 				})
 			} else {
 				matchArray = append(matchArray, Match{
-					bid:        existingOrder,
-					ask:        incomingOrder,
-					price:      l.price,
-					sizeFilled: existingOrder.Size,
+					BidID:      existingOrder.ID,
+					AskID:      incomingOrder.ID,
+					Price:      l.Price,
+					SizeFilled: existingOrder.Size,
 				})
 			}
-			l.totalVolume = l.totalVolume - existingOrder.Size
+			l.TotalVolume = l.TotalVolume - existingOrder.Size
 			incomingOrder.Size = incomingOrder.Size - existingOrder.Size
 			existingOrder.Size = 0
+		}
+		if existingOrder.isFilled() {
 			l.DeleteOrder(existingOrder)
 		}
 	}
@@ -123,7 +130,7 @@ func (l *Limit) fill(incomingOrder *Order) []Match {
 type AskLimitsInterface []*Limit
 
 func (ls AskLimitsInterface) Less(a int, b int) bool {
-	if ls[a].price < ls[b].price {
+	if ls[a].Price < ls[b].Price {
 		return true
 	} else {
 		return false
@@ -141,7 +148,7 @@ func (ls AskLimitsInterface) Len() int {
 type BidLimitsInterface []*Limit
 
 func (ls BidLimitsInterface) Less(a int, b int) bool {
-	if ls[a].price > ls[b].price {
+	if ls[a].Price > ls[b].Price {
 		return true
 	} else {
 		return false
@@ -162,6 +169,7 @@ type OrderBook struct {
 	PriceToAsksMap map[float64]*Limit
 	PriceToBidsMap map[float64]*Limit
 	IDToOrderMap   map[int]*Order
+	mu             sync.Mutex
 }
 
 func NewOrderbook() *OrderBook {
@@ -175,6 +183,8 @@ func NewOrderbook() *OrderBook {
 
 // fill at `price`
 func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
+	ob.mu.Lock()
+	defer ob.mu.Unlock()
 	var limit *Limit
 
 	// find the limit object with the corresponding price
@@ -193,6 +203,13 @@ func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
 			ob.PriceToAsksMap[price] = limit
 		}
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"isBid":     o.IsBid,
+		"size":      o.Size,
+		"price":     limit.Price,
+		"timestamp": o.Timestamp,
+	}).Info("limit order placed")
 
 	ob.IDToOrderMap[o.ID] = o
 	limit.AddOrder(o)
@@ -226,9 +243,9 @@ func (ob *OrderBook) PlaceMarketOrder(incomingOrder *Order) []Match {
 			// inside a limit, orders should be sorted according to timestamp
 			matchArray = append(matchArray, limit.fill(incomingOrder)...)
 			if len(limit.Orders) == 0 {
-				delete(ob.PriceToAsksMap, limit.price)
+				delete(ob.PriceToAsksMap, limit.Price)
 				for index, toBeDeletedLimit := range ob.AskLimits {
-					if toBeDeletedLimit.price == limit.price {
+					if toBeDeletedLimit.Price == limit.Price {
 						ob.AskLimits[index] = ob.AskLimits[len(ob.AskLimits)-1]
 						ob.AskLimits = ob.AskLimits[:len(ob.AskLimits)-1]
 						break
@@ -242,9 +259,9 @@ func (ob *OrderBook) PlaceMarketOrder(incomingOrder *Order) []Match {
 			// inside a limit, orders should be sorted according to timestamp
 			matchArray = append(matchArray, limit.fill(incomingOrder)...)
 			if len(limit.Orders) == 0 {
-				delete(ob.PriceToBidsMap, limit.price)
+				delete(ob.PriceToBidsMap, limit.Price)
 				for index, toBeDeletedLimit := range ob.BidLimits {
-					if toBeDeletedLimit.price == limit.price {
+					if toBeDeletedLimit.Price == limit.Price {
 						ob.BidLimits[index] = ob.BidLimits[len(ob.BidLimits)-1]
 						ob.BidLimits = ob.BidLimits[:len(ob.BidLimits)-1]
 						break
@@ -253,13 +270,14 @@ func (ob *OrderBook) PlaceMarketOrder(incomingOrder *Order) []Match {
 			}
 		}
 	}
+	logrus.Info("market order filled")
 	return matchArray
 }
 
 func (ob *OrderBook) GetTotalVolumeAllBids() float64 {
 	total := float64(0)
 	for _, limit := range ob.BidLimits {
-		total += limit.totalVolume
+		total += limit.TotalVolume
 	}
 	return total
 }
@@ -267,7 +285,7 @@ func (ob *OrderBook) GetTotalVolumeAllBids() float64 {
 func (ob *OrderBook) GetTotalVolumeAllAsks() float64 {
 	total := float64(0)
 	for _, limit := range ob.AskLimits {
-		total += limit.totalVolume
+		total += limit.TotalVolume
 	}
 	return total
 }
@@ -278,8 +296,8 @@ func (ob *OrderBook) CancelOrder(o *Order) {
 }
 
 type Match struct {
-	ask        *Order
-	bid        *Order
-	sizeFilled float64
-	price      float64
+	AskID      int
+	BidID      int
+	SizeFilled float64
+	Price      float64
 }

@@ -15,8 +15,23 @@ import (
 type OrderBookData struct {
 	TotalAsksVolume float64
 	TotalBidsVolume float64
-	Asks            []*orderbook.Order
-	Bids            []*orderbook.Order
+	Asks            []*OrderData
+	Bids            []*OrderData
+}
+
+type OrderData struct {
+	ID        int
+	IsBid     bool
+	Size      float64
+	Price     float64
+	Timestamp int64
+}
+
+type MatchData struct {
+	Ask        OrderData
+	Bid        OrderData
+	SizeFilled float64
+	Price      float64
 }
 
 type OrderType string
@@ -64,12 +79,18 @@ func (ex *Exchange) handlePlaceOrder(c echo.Context) error {
 	)
 	if placeOrderData.Type == MarketOrderType {
 		matches := ex.orderbooks[placeOrderData.Market].PlaceMarketOrder(incomingOrder)
-		return c.JSON(200, map[string]any{"matches": matches})
+		return c.JSON(200, map[string]interface{}{"matches": matches})
 	} else {
 		ex.orderbooks[placeOrderData.Market].PlaceLimitOrder(placeOrderData.Price, incomingOrder)
 		return c.JSON(200, map[string]interface{}{
-			"msg":   "limit order placed",
-			"order": incomingOrder,
+			"msg": "limit order placed",
+			"order": OrderData{
+				ID:        incomingOrder.ID,
+				IsBid:     incomingOrder.IsBid,
+				Size:      incomingOrder.Size,
+				Price:     incomingOrder.Price,
+				Timestamp: incomingOrder.Timestamp,
+			},
 		})
 	}
 }
@@ -79,15 +100,33 @@ func (ex *Exchange) handleGetBook(c echo.Context) error {
 	orderBookData := OrderBookData{
 		TotalAsksVolume: 0.0,
 		TotalBidsVolume: 0.0,
-		Asks:            make([]*orderbook.Order, 0),
-		Bids:            make([]*orderbook.Order, 0),
+		Asks:            make([]*OrderData, 0),
+		Bids:            make([]*OrderData, 0),
 	}
 
 	for _, iterator := range ex.orderbooks[marketType].AskLimits {
-		orderBookData.Asks = append(orderBookData.Asks, iterator.Orders...)
+		for _, order := range iterator.Orders {
+			orderData := &OrderData{
+				ID:        order.ID,
+				IsBid:     order.IsBid,
+				Size:      order.Size,
+				Price:     order.Price,
+				Timestamp: order.Timestamp,
+			}
+			orderBookData.Asks = append(orderBookData.Asks, orderData)
+		}
 	}
 	for _, iterator := range ex.orderbooks[marketType].BidLimits {
-		orderBookData.Bids = append(orderBookData.Bids, iterator.Orders...)
+		for _, order := range iterator.Orders {
+			orderData := &OrderData{
+				ID:        order.ID,
+				IsBid:     order.IsBid,
+				Size:      order.Size,
+				Price:     order.Price,
+				Timestamp: order.Timestamp,
+			}
+			orderBookData.Bids = append(orderBookData.Bids, orderData)
+		}
 	}
 	orderBookData.TotalAsksVolume += ex.orderbooks[marketType].GetTotalVolumeAllAsks()
 	orderBookData.TotalBidsVolume += ex.orderbooks[marketType].GetTotalVolumeAllBids()
