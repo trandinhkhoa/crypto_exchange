@@ -134,6 +134,30 @@ func (ex *Exchange) handleGetBook(c echo.Context) error {
 	return c.JSON(200, orderBookData)
 }
 
+func (ex *Exchange) handleGetCurrentPrice(c echo.Context) error {
+	marketType := MarketType(c.Param("market"))
+	currentPrice := ex.orderbooks[marketType].CurrentPrice
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"currentPrice": currentPrice,
+	})
+}
+
+func (ex *Exchange) handleGetBestAsk(c echo.Context) error {
+	marketType := MarketType(c.Param("market"))
+	bestAskPrice := ex.orderbooks[marketType].GetBestAsk().Price
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"bestAskPrice": bestAskPrice,
+	})
+}
+
+func (ex *Exchange) handleGetBestBid(c echo.Context) error {
+	marketType := MarketType(c.Param("market"))
+	bestBidPrice := ex.orderbooks[marketType].GetBestBid().Price
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"bestBidPrice": bestBidPrice,
+	})
+}
+
 func (ex *Exchange) handleCancelOrder(c echo.Context) error {
 	resp := "handleCancelOrder"
 	cancelledOrderID, err := strconv.Atoi(c.Param("id"))
@@ -213,6 +237,9 @@ func StartServer() {
 	e.POST("/order", ex.handlePlaceOrder)
 
 	e.GET("/book/:market", ex.handleGetBook)
+	e.GET("/book/:market/currentPrice", ex.handleGetCurrentPrice)
+	e.GET("/book/:market/bestAsk", ex.handleGetBestAsk)
+	e.GET("/book/:market/bestBid", ex.handleGetBestBid)
 
 	e.DELETE("/order/:id", ex.handleCancelOrder)
 

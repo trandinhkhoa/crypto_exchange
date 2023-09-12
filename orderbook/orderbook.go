@@ -169,6 +169,7 @@ type OrderBook struct {
 	PriceToAsksMap map[float64]*Limit
 	PriceToBidsMap map[float64]*Limit
 	IDToOrderMap   map[int]*Order
+	CurrentPrice   float64
 	mu             sync.Mutex
 }
 
@@ -225,6 +226,16 @@ func (ob *OrderBook) sortBidLimits() {
 	sort.Sort(ob.BidLimits)
 }
 
+func (ob *OrderBook) GetBestAsk() Limit {
+	ob.sortAskLimits()
+	return *ob.AskLimits[0]
+}
+
+func (ob *OrderBook) GetBestBid() Limit {
+	ob.sortBidLimits()
+	return *ob.BidLimits[0]
+}
+
 // fill at best price
 func (ob *OrderBook) PlaceMarketOrder(incomingOrder *Order) []Match {
 	// check if there is enough liquidity
@@ -242,6 +253,11 @@ func (ob *OrderBook) PlaceMarketOrder(incomingOrder *Order) []Match {
 		for _, limit := range ob.AskLimits {
 			// inside a limit, orders should be sorted according to timestamp
 			matchArray = append(matchArray, limit.fill(incomingOrder)...)
+			ob.CurrentPrice = limit.Price
+			logrus.WithFields(logrus.Fields{
+				"currentPrice": ob.CurrentPrice,
+			}).Info("------")
+			// clear limit if there is no orders left inside
 			if len(limit.Orders) == 0 {
 				delete(ob.PriceToAsksMap, limit.Price)
 				for index, toBeDeletedLimit := range ob.AskLimits {
@@ -258,6 +274,10 @@ func (ob *OrderBook) PlaceMarketOrder(incomingOrder *Order) []Match {
 		for _, limit := range ob.BidLimits {
 			// inside a limit, orders should be sorted according to timestamp
 			matchArray = append(matchArray, limit.fill(incomingOrder)...)
+			ob.CurrentPrice = limit.Price
+			logrus.WithFields(logrus.Fields{
+				"currentPrice": ob.CurrentPrice,
+			}).Info("------")
 			if len(limit.Orders) == 0 {
 				delete(ob.PriceToBidsMap, limit.Price)
 				for index, toBeDeletedLimit := range ob.BidLimits {

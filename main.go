@@ -16,7 +16,7 @@ func init() {
 
 func main() {
 	go server.StartServer()
-	go client.PlaceLimitRepeat()
+	go client.MakeMarket()
 	go client.PlaceMarketRepeat()
 	select {}
 }
