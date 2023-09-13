@@ -85,14 +85,14 @@ func MakeMarket() {
 			Type:   "LIMIT",
 			IsBid:  false,
 			Size:   1,
-			Price:  bestAskPrice - 1,
+			Price:  bestAskPrice + 1,
 			Market: "ETH",
 		}
 		bidBody := server.PlaceOrderRequest{
 			Type:   "LIMIT",
 			IsBid:  true,
 			Size:   1,
-			Price:  bestBidPrice + 1,
+			Price:  bestBidPrice - 1,
 			Market: "ETH",
 		}
 		PlaceOrder(askBody)
