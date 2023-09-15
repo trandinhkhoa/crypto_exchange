@@ -66,6 +66,9 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
             - mutex: for case where you dont care about communication and just want to make sure only one goroutine can access a variable at a time to avoid conflicts
     - in Go, when you create a new instance of a struct using &OrderData{...}, you're allocating memory for that struct on the heap. This memory will remain valid and won't be garbage collected as long as there's a reference to it. In your case, the reference is maintained in the orderBookData.Bids slice.
         - Once you exit the code block, the local variable orderData goes out of scope, but the memory it points to is still valid because the orderBookData.Bids slice holds a reference to it.
+    - similarities:
+        - go get <> == npm install
+            - go.mod == package.json
 ```
 	for _, iterator := range ex.orderbooks[marketType].BidLimits {
 		for _, order := range iterator.Orders {

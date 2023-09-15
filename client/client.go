@@ -69,7 +69,7 @@ func simulateFetchPriceFromOtherExchange() float64 {
 }
 
 func MakeMarket() {
-	ticker := time.NewTicker(1000 * time.Millisecond)
+	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
 		bestAskPrice, _ := GetBestAskPrice()
 		if bestAskPrice == 0 {
@@ -139,7 +139,7 @@ func PlaceMarketRepeat() {
 	ticker := time.NewTicker(1500 * time.Millisecond)
 	for {
 		isBid := true
-		if int(rand.Intn(9)) < 5 {
+		if int(rand.Intn(9)) < 3 {
 			isBid = false
 		}
 		askBody := server.PlaceOrderRequest{

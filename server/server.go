@@ -9,7 +9,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/sirupsen/logrus"
 	"github.com/trandinhkhoa/crypto-exchange/orderbook"
+	"golang.org/x/net/websocket"
 )
 
 type OrderBookData struct {
@@ -211,6 +213,30 @@ func PanicRecoveryMiddleware() echo.MiddlewareFunc {
 	}
 }
 
+// this function is called everytime a client connect to the websocket
+func (ex *Exchange) WebSocketHandler(ws *websocket.Conn) {
+	lastCurrentPrice := ex.orderbooks["ETH"].CurrentPrice
+	fmt.Println("Hi I am WebSocketHandler")
+
+	for {
+		currentPrice := ex.orderbooks["ETH"].CurrentPrice
+		if currentPrice != lastCurrentPrice {
+			lastCurrentPrice = currentPrice
+			msg := fmt.Sprint(currentPrice)
+			// Send the received message back to the client
+			if err := websocket.Message.Send(ws, msg); err != nil {
+				fmt.Println("Can't send:", err)
+				break
+			} else {
+				logrus.WithFields(logrus.Fields{
+					"msg": msg,
+				}).Info("Sent to client")
+			}
+			// time.Sleep(1 * time.Second)
+		}
+	}
+}
+
 func StartServer() {
 	e := echo.New()
 	// Recover middleware to catch panics
@@ -218,22 +244,7 @@ func StartServer() {
 	e.Use(PanicRecoveryMiddleware())
 
 	e.HTTPErrorHandler = httpErrorHandler
-
-	// client, err := ethclient.Dial("http://localhost:8545")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
 	ex := NewExchange()
-	// ex, err := NewExchange(exchangePrivateKey, client)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// ex.registerUser("829e924fdf021ba3dbbc4225edfece9aca04b929d6e75613329ca6f1d31c0bb4", 8)
-	// ex.registerUser("a453611d9419d0e56f499079478fd72c37b251a94bfde4d19872c44cf65386e3", 7)
-	// ex.registerUser("e485d098507f54e7733a205420dfddbe58db035fa577fc294ebd14db90767a52", 666)
-
 	e.POST("/order", ex.handlePlaceOrder)
 
 	e.GET("/book/:market", ex.handleGetBook)
@@ -242,6 +253,8 @@ func StartServer() {
 	e.GET("/book/:market/bestBid", ex.handleGetBestBid)
 
 	e.DELETE("/order/:id", ex.handleCancelOrder)
+
+	e.GET("/ws/currentPrice", echo.WrapHandler(websocket.Handler(ex.WebSocketHandler)))
 
 	e.Start(":3000")
 }
