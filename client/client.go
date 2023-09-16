@@ -69,7 +69,7 @@ func simulateFetchPriceFromOtherExchange() float64 {
 }
 
 func MakeMarket() {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(1000 * time.Millisecond)
 	for {
 		bestAskPrice, _ := GetBestAskPrice()
 		if bestAskPrice == 0 {
@@ -82,6 +82,7 @@ func MakeMarket() {
 		}
 
 		askBody := server.PlaceOrderRequest{
+			UserId: "maker123",
 			Type:   "LIMIT",
 			IsBid:  false,
 			Size:   1,
@@ -89,6 +90,7 @@ func MakeMarket() {
 			Market: "ETH",
 		}
 		bidBody := server.PlaceOrderRequest{
+			UserId: "maker123",
 			Type:   "LIMIT",
 			IsBid:  true,
 			Size:   1,
@@ -139,10 +141,11 @@ func PlaceMarketRepeat() {
 	ticker := time.NewTicker(1500 * time.Millisecond)
 	for {
 		isBid := true
-		if int(rand.Intn(9)) < 3 {
+		if int(rand.Intn(9)) < 5 {
 			isBid = false
 		}
 		askBody := server.PlaceOrderRequest{
+			UserId: "traderJoe123",
 			Type:   "MARKET",
 			IsBid:  isBid,
 			Size:   1,

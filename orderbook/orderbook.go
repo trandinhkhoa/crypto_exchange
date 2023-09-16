@@ -8,12 +8,15 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/trandinhkhoa/crypto-exchange/users"
 )
 
 type Order struct {
 	// false = ask
+	UserId    string
 	ID        int
 	IsBid     bool
+	OrderType string
 	Size      float64
 	Price     float64
 	limit     *Limit
@@ -21,10 +24,12 @@ type Order struct {
 }
 
 // TODO: make sure ID is unique among orderbooks of all markets
-func NewOrder(isBid bool, size float64) *Order {
+func NewOrder(isBid bool, size float64, userId string, orderType string) *Order {
 	return &Order{
+		UserId:    userId,
 		ID:        int(rand.Int31()),
 		IsBid:     isBid,
+		OrderType: orderType,
 		Size:      size,
 		Timestamp: time.Now().UnixNano(),
 	}
@@ -41,16 +46,18 @@ func (o *Order) isFilled() bool {
 
 // for each price level(limit) we need to know total volume and the corresponding orders
 type Limit struct {
-	Price       float64
-	TotalVolume float64
+	orderBookPtr *OrderBook
+	Price        float64
+	TotalVolume  float64
 	// uppercase O for Order Springer
 	Orders []*Order
 }
 
-func NewLimit(price float64) *Limit {
+func NewLimit(price float64, orderBookPtr *OrderBook) *Limit {
 	return &Limit{
-		Price:  price,
-		Orders: []*Order{},
+		orderBookPtr: orderBookPtr,
+		Price:        price,
+		Orders:       []*Order{},
 	}
 }
 
@@ -73,8 +80,10 @@ func (l *Limit) DeleteOrder(o *Order) {
 	l.TotalVolume -= float64(o.Size)
 }
 
+// for now incoming always == MARKET
 func (l *Limit) fill(incomingOrder *Order) []Match {
 	matchArray := make([]Match, 0)
+	usersBalancesMap := l.orderBookPtr.UsersBalances
 	for _, existingOrder := range l.Orders {
 
 		if incomingOrder.isFilled() {
@@ -88,6 +97,13 @@ func (l *Limit) fill(incomingOrder *Order) []Match {
 					Price:      l.Price,
 					SizeFilled: incomingOrder.Size,
 				})
+				bidUserId := incomingOrder.UserId
+				askUserId := existingOrder.UserId
+				usersBalancesMap[bidUserId].Balance["ETH"] += incomingOrder.Size
+				if incomingOrder.OrderType == "MARKET" {
+					usersBalancesMap[bidUserId].Balance["USD"] -= incomingOrder.Size * l.Price
+				}
+				usersBalancesMap[askUserId].Balance["USD"] += incomingOrder.Size * l.Price
 			} else {
 				matchArray = append(matchArray, Match{
 					BidID:      existingOrder.ID,
@@ -95,6 +111,13 @@ func (l *Limit) fill(incomingOrder *Order) []Match {
 					Price:      l.Price,
 					SizeFilled: incomingOrder.Size,
 				})
+				bidUserId := existingOrder.UserId
+				askUserId := incomingOrder.UserId
+				usersBalancesMap[bidUserId].Balance["ETH"] += incomingOrder.Size
+				usersBalancesMap[askUserId].Balance["USD"] += incomingOrder.Size * l.Price
+				if incomingOrder.OrderType == "MARKET" {
+					usersBalancesMap[askUserId].Balance["ETH"] -= incomingOrder.Size
+				}
 			}
 			l.TotalVolume = l.TotalVolume - incomingOrder.Size
 			existingOrder.Size = existingOrder.Size - incomingOrder.Size
@@ -107,6 +130,13 @@ func (l *Limit) fill(incomingOrder *Order) []Match {
 					Price:      l.Price,
 					SizeFilled: existingOrder.Size,
 				})
+				bidUserId := incomingOrder.UserId
+				askUserId := existingOrder.UserId
+				usersBalancesMap[bidUserId].Balance["ETH"] += existingOrder.Size
+				usersBalancesMap[askUserId].Balance["USD"] += existingOrder.Size * l.Price
+				if incomingOrder.OrderType == "MARKET" {
+					usersBalancesMap[bidUserId].Balance["USD"] -= incomingOrder.Size * l.Price
+				}
 			} else {
 				matchArray = append(matchArray, Match{
 					BidID:      existingOrder.ID,
@@ -114,6 +144,13 @@ func (l *Limit) fill(incomingOrder *Order) []Match {
 					Price:      l.Price,
 					SizeFilled: existingOrder.Size,
 				})
+				bidUserId := existingOrder.UserId
+				askUserId := incomingOrder.UserId
+				usersBalancesMap[bidUserId].Balance["ETH"] += existingOrder.Size
+				usersBalancesMap[askUserId].Balance["USD"] += existingOrder.Size * l.Price
+				if incomingOrder.OrderType == "MARKET" {
+					usersBalancesMap[askUserId].Balance["ETH"] -= incomingOrder.Size
+				}
 			}
 			l.TotalVolume = l.TotalVolume - existingOrder.Size
 			incomingOrder.Size = incomingOrder.Size - existingOrder.Size
@@ -164,6 +201,7 @@ func (ls BidLimitsInterface) Len() int {
 }
 
 type OrderBook struct {
+	UsersBalances  users.Users
 	AskLimits      AskLimitsInterface
 	BidLimits      BidLimitsInterface
 	PriceToAsksMap map[float64]*Limit
@@ -173,9 +211,10 @@ type OrderBook struct {
 	mu             sync.Mutex
 }
 
-func NewOrderbook() *OrderBook {
+func NewOrderbook(idToUserMap *users.Users) *OrderBook {
 	// w/o make :  assignment to entry in nil map
 	return &OrderBook{
+		UsersBalances:  *idToUserMap,
 		PriceToAsksMap: make(map[float64]*Limit),
 		PriceToBidsMap: make(map[float64]*Limit),
 		IDToOrderMap:   make(map[int]*Order),
@@ -195,7 +234,7 @@ func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
 		limit = ob.PriceToAsksMap[price]
 	}
 	if limit == nil {
-		limit = NewLimit(price)
+		limit = NewLimit(price, ob)
 		if o.IsBid {
 			ob.BidLimits = append(ob.BidLimits, limit)
 			ob.PriceToBidsMap[price] = limit

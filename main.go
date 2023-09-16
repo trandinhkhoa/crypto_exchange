@@ -1,8 +1,9 @@
 package main
 
 import (
+	"time"
+
 	"github.com/sirupsen/logrus"
-	"github.com/trandinhkhoa/crypto-exchange/client"
 	"github.com/trandinhkhoa/crypto-exchange/server"
 )
 
@@ -16,7 +17,8 @@ func init() {
 
 func main() {
 	go server.StartServer()
-	go client.MakeMarket()
-	go client.PlaceMarketRepeat()
+	time.Sleep(1 * time.Second)
+	// go client.MakeMarket()
+	// go client.PlaceMarketRepeat()
 	select {}
 }

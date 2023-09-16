@@ -12,7 +12,8 @@ func assert(t *testing.T, a, b any) {
 }
 
 func TestLimit(t *testing.T) {
-	l := NewLimit(10_000)
+	ob := NewOrderbook(nil)
+	l := NewLimit(10_000, ob)
 	buyOrderA := NewOrder(true, 5)
 	buyOrderB := NewOrder(true, 8)
 	buyOrderC := NewOrder(true, 10)
@@ -34,7 +35,7 @@ func TestLimit(t *testing.T) {
 }
 
 func TestOrderBookPlaceLimitOrder(t *testing.T) {
-	ob := NewOrderbook()
+	ob := NewOrderbook(nil)
 
 	sellOrder := NewOrder(false, 20)
 	ob.PlaceLimitOrder(10_000, sellOrder)
@@ -53,9 +54,9 @@ func TestOrderBookPlaceLimitOrder(t *testing.T) {
 func TestLimitsInterface(t *testing.T) {
 	var orderbook OrderBook
 	orderbook.AskLimits = make(AskLimitsInterface, 0)
-	limit1 := NewLimit(10000)
+	limit1 := NewLimit(10000, &orderbook)
 	orderbook.AskLimits = append(orderbook.AskLimits, limit1)
-	limit2 := NewLimit(20000)
+	limit2 := NewLimit(20000, &orderbook)
 	orderbook.AskLimits = append(orderbook.AskLimits, limit2)
 
 	assert(t, orderbook.AskLimits.Len(), 2)
@@ -64,7 +65,7 @@ func TestLimitsInterface(t *testing.T) {
 	orderbook.AskLimits.Swap(0, 1)
 	assert(t, orderbook.AskLimits[0].Price, float64(20000))
 	assert(t, orderbook.AskLimits[1].Price, float64(10000))
-	limit3 := NewLimit(30000)
+	limit3 := NewLimit(30000, &orderbook)
 	orderbook.AskLimits = append(orderbook.AskLimits, limit3)
 	orderbook.sortAskLimits()
 	assert(t, orderbook.AskLimits[0].Price, float64(10000))
@@ -79,7 +80,7 @@ func TestPlaceMarketOrderNotEnoughLiquidity(t *testing.T) {
 		}
 	}()
 
-	ob := NewOrderbook()
+	ob := NewOrderbook(nil)
 
 	// ask
 	sellOrder := NewOrder(false, 20)
@@ -110,8 +111,8 @@ func TestPlaceMarketOrderBid(t *testing.T) {
 	// 1 ask as before, it's still there with a reduced size since not enough bidder yet
 	assert(t, len(ob.AskLimits), 1)
 
-	assert(t, matches[0].Ask, sellOrder)
-	assert(t, matches[0].Bid, buyOrder)
+	assert(t, matches[0].AskID, sellOrder.ID)
+	assert(t, matches[0].BidID, buyOrder.ID)
 	assert(t, matches[0].Price, 10_000.0)
 	assert(t, buyOrder.isFilled(), true)
 }
@@ -144,18 +145,18 @@ func TestPlaceMarketOrderAskMultiFill(t *testing.T) {
 	// 2 bid: 1 whose size reduced from 20 to 5, 1 untouched of size 25
 	assert(t, len(ob.BidLimits), 2)
 
-	assert(t, matches[0].Ask, sellOrder)
-	assert(t, matches[0].Bid, buyOrder1)
+	assert(t, matches[0].AskID, sellOrder.ID)
+	assert(t, matches[0].BidID, buyOrder1.ID)
 	assert(t, matches[0].Price, 15_000.0)
 	assert(t, matches[0].SizeFilled, 10.0)
 
-	assert(t, matches[1].Ask, sellOrder)
-	assert(t, matches[1].Bid, buyOrder2)
+	assert(t, matches[1].AskID, sellOrder.ID)
+	assert(t, matches[1].BidID, buyOrder2.ID)
 	assert(t, matches[1].Price, 10_000.0)
 	assert(t, matches[1].SizeFilled, 15.0)
 
-	assert(t, matches[2].Ask, sellOrder)
-	assert(t, matches[2].Bid, buyOrder3)
+	assert(t, matches[2].AskID, sellOrder.ID)
+	assert(t, matches[2].BidID, buyOrder3.ID)
 	assert(t, matches[2].Price, 10_000.0)
 	assert(t, matches[2].SizeFilled, 5.0)
 

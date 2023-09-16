@@ -91,3 +91,11 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
 
 - makers:
     - "make" liquidity by providing orders for others to trade against.
+
+- misc.:
+    - bad code architecture -> I find it hard to write tests
+        - I should be able to test Limit without initializing Orderbook, users
+- current bugs:
+    - fixed: users place sell market order, matched got usd back, but eth not deducted
+    - place limit order high (sell), try to clear out buys to push the price, to see if the limit order is eventually filled
+        - multiple 10000 price matched -> because for a moement bestAsk is 10000, market making logic then keep hanging around this value

@@ -3,14 +3,18 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"runtime/debug"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/sirupsen/logrus"
 	"github.com/trandinhkhoa/crypto-exchange/orderbook"
+	"github.com/trandinhkhoa/crypto-exchange/users"
 	"golang.org/x/net/websocket"
 )
 
@@ -51,6 +55,7 @@ const (
 
 // fields need to be visible to outer packages since this struct will be used by package json
 type PlaceOrderRequest struct {
+	UserId string
 	Type   OrderType // limit or market
 	IsBid  bool
 	Size   float64
@@ -59,14 +64,24 @@ type PlaceOrderRequest struct {
 }
 
 type Exchange struct {
-	orderbooks map[MarketType]*orderbook.OrderBook
+	orderbooks  map[MarketType]*orderbook.OrderBook
+	idToUserMap map[string]*users.User
+	hotWallet   *users.Wallet
 }
 
 func NewExchange() *Exchange {
 	aMap := make(map[MarketType]*orderbook.OrderBook)
-	aMap[ETHMarketType] = orderbook.NewOrderbook()
+	usersMap := make(map[string]*users.User)
+	aMap[ETHMarketType] = orderbook.NewOrderbook((*users.Users)(&usersMap))
 	return &Exchange{
-		orderbooks: aMap,
+		orderbooks:  aMap,
+		idToUserMap: usersMap,
+		// TODO: what if no &
+		hotWallet: &users.Wallet{
+			PublicKey:  "",
+			PrivateKey: "",
+			Address:    "",
+		},
 	}
 }
 
@@ -78,11 +93,19 @@ func (ex *Exchange) handlePlaceOrder(c echo.Context) error {
 	incomingOrder := orderbook.NewOrder(
 		placeOrderData.IsBid,
 		placeOrderData.Size,
+		placeOrderData.UserId,
+		string(placeOrderData.Type),
 	)
 	if placeOrderData.Type == MarketOrderType {
 		matches := ex.orderbooks[placeOrderData.Market].PlaceMarketOrder(incomingOrder)
 		return c.JSON(200, map[string]interface{}{"matches": matches})
 	} else {
+		user := ex.idToUserMap[incomingOrder.UserId]
+		if incomingOrder.IsBid {
+			user.Balance["USD"] -= incomingOrder.Price * incomingOrder.Size
+		} else {
+			user.Balance["ETH"] -= incomingOrder.Size
+		}
 		ex.orderbooks[placeOrderData.Market].PlaceLimitOrder(placeOrderData.Price, incomingOrder)
 		return c.JSON(200, map[string]interface{}{
 			"msg": "limit order placed",
@@ -237,6 +260,43 @@ func (ex *Exchange) WebSocketHandler(ws *websocket.Conn) {
 	}
 }
 
+func generateRandomString() string {
+	prefix := "id"
+	length := 10
+	source := rand.NewSource(time.Now().UnixNano())
+	randomizer := rand.New(source)
+
+	letterRunes := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+	b := strings.Builder{}
+	b.WriteString(prefix)
+
+	for i := 0; i < length-len(prefix); i++ {
+		randomIndex := randomizer.Intn(len(letterRunes))
+		b.WriteRune(letterRunes[randomIndex])
+	}
+
+	return b.String()
+}
+
+func (ex *Exchange) RegisterUser(newUser *users.User) {
+	// TODO: check new id uniqueness
+	ex.idToUserMap[newUser.Id] = newUser
+}
+
+func (ex *Exchange) handleGetUsers(c echo.Context) error {
+	return c.JSON(200, ex.idToUserMap)
+}
+
+func (ex *Exchange) handleGetUser(c echo.Context) error {
+	userId := c.Param("userId")
+	user, ok := ex.idToUserMap[userId]
+	if !ok {
+		return c.JSON(404, fmt.Sprintf("UserId %s does not exist", userId))
+	}
+	return c.JSON(200, user)
+}
+
 func StartServer() {
 	e := echo.New()
 	// Recover middleware to catch panics
@@ -244,9 +304,42 @@ func StartServer() {
 	e.Use(PanicRecoveryMiddleware())
 
 	e.HTTPErrorHandler = httpErrorHandler
+	// client, err := ethclient.Dial("http://localhost:8545")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
 	ex := NewExchange()
+	ex.RegisterUser(&users.User{
+		// Id:         generateRandomString(),
+		Id:         "maker123",
+		PrivateKey: "",
+		Balance: map[string]float64{
+			"ETH": 10000.0,
+			"USD": 1000000.0,
+		},
+	})
+	ex.RegisterUser(&users.User{
+		Id:         "traderJoe123",
+		PrivateKey: "",
+		Balance: map[string]float64{
+			"ETH": 10.0,
+			"USD": 1010.0,
+		},
+	})
+	ex.RegisterUser(&users.User{
+		Id:         "mememe",
+		PrivateKey: "",
+		Balance: map[string]float64{
+			"ETH": 0.0,
+			"USD": 1010.0,
+		},
+	})
+
 	e.POST("/order", ex.handlePlaceOrder)
 
+	e.GET("/users", ex.handleGetUsers)
+	e.GET("/users/:userId", ex.handleGetUser)
 	e.GET("/book/:market", ex.handleGetBook)
 	e.GET("/book/:market/currentPrice", ex.handleGetCurrentPrice)
 	e.GET("/book/:market/bestAsk", ex.handleGetBestAsk)
