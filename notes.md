@@ -66,6 +66,7 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
             - mutex: for case where you dont care about communication and just want to make sure only one goroutine can access a variable at a time to avoid conflicts
     - in Go, when you create a new instance of a struct using &OrderData{...}, you're allocating memory for that struct on the heap. This memory will remain valid and won't be garbage collected as long as there's a reference to it. In your case, the reference is maintained in the orderBookData.Bids slice.
         - Once you exit the code block, the local variable orderData goes out of scope, but the memory it points to is still valid because the orderBookData.Bids slice holds a reference to it.
+    - if inner struct has a pointer to outer struct, be careful passing around the instance of the outer struct. If pass by value , the new arg will contain an instance of the inner class that is pointing to the "original" outer instance -> pass the pointer instead
     - similarities:
         - go get <> == npm install
             - go.mod == package.json
@@ -95,6 +96,15 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
 - misc.:
     - bad code architecture -> I find it hard to write tests
         - I should be able to test Limit without initializing Orderbook, users
+    - https://stackoverflow.com/questions/1222392/what-is-domain-driven-design-ddd/1222488#1222488
+        - Rob Knight's answer
+    - composition over inheritance ???
+        - top answer: https://www.reddit.com/r/AskProgramming/comments/lv7m7a/i_still_dont_understand_the_prefer_composition/
+    - https://www.reddit.com/r/golang/comments/9ls611/when_to_use_methods/?utm_source=reddit-android
+    - https://www.reddit.com/r/golang/comments/104m27v/how_to_avoid_oo_minded/
+    - https://www.gobeyond.dev/standard-package-layout/
+    - https://blog.cleancoder.com/
+    - https://manuel.kiessling.net/2012/09/28/applying-the-clean-architecture-to-go-applications/
 - current bugs:
     - fixed: users place sell market order, matched got usd back, but eth not deducted
     - place limit order high (sell), try to clear out buys to push the price, to see if the limit order is eventually filled

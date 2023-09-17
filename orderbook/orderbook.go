@@ -37,7 +37,7 @@ func NewOrder(isBid bool, size float64, userId string, orderType string) *Order 
 
 // implement Stringer interface
 func (o *Order) String() string {
-	return fmt.Sprintf("size: %.2f", o.Size)
+	return fmt.Sprintf("userId: %s size: %.2f", o.UserId, o.Size)
 }
 
 func (o *Order) isFilled() bool {
@@ -46,15 +46,17 @@ func (o *Order) isFilled() bool {
 
 // for each price level(limit) we need to know total volume and the corresponding orders
 type Limit struct {
+	isBid        bool
 	orderBookPtr *OrderBook
 	Price        float64
 	TotalVolume  float64
-	// uppercase O for Order Springer
+	// uppercase O for Order Stringer interface
 	Orders []*Order
 }
 
-func NewLimit(price float64, orderBookPtr *OrderBook) *Limit {
+func NewLimit(price float64, orderBookPtr *OrderBook, isBid bool) *Limit {
 	return &Limit{
+		isBid:        isBid,
 		orderBookPtr: orderBookPtr,
 		Price:        price,
 		Orders:       []*Order{},
@@ -83,79 +85,47 @@ func (l *Limit) DeleteOrder(o *Order) {
 // for now incoming always == MARKET
 func (l *Limit) fill(incomingOrder *Order) []Match {
 	matchArray := make([]Match, 0)
-	usersBalancesMap := l.orderBookPtr.UsersBalances
-	for _, existingOrder := range l.Orders {
 
+	for _, existingOrder := range l.Orders {
 		if incomingOrder.isFilled() {
 			break
 		}
-		if existingOrder.Size >= incomingOrder.Size {
-			if incomingOrder.IsBid {
-				matchArray = append(matchArray, Match{
-					BidID:      incomingOrder.ID,
-					AskID:      existingOrder.ID,
-					Price:      l.Price,
-					SizeFilled: incomingOrder.Size,
-				})
-				bidUserId := incomingOrder.UserId
-				askUserId := existingOrder.UserId
-				usersBalancesMap[bidUserId].Balance["ETH"] += incomingOrder.Size
-				if incomingOrder.OrderType == "MARKET" {
-					usersBalancesMap[bidUserId].Balance["USD"] -= incomingOrder.Size * l.Price
-				}
-				usersBalancesMap[askUserId].Balance["USD"] += incomingOrder.Size * l.Price
-			} else {
-				matchArray = append(matchArray, Match{
-					BidID:      existingOrder.ID,
-					AskID:      incomingOrder.ID,
-					Price:      l.Price,
-					SizeFilled: incomingOrder.Size,
-				})
-				bidUserId := existingOrder.UserId
-				askUserId := incomingOrder.UserId
-				usersBalancesMap[bidUserId].Balance["ETH"] += incomingOrder.Size
-				usersBalancesMap[askUserId].Balance["USD"] += incomingOrder.Size * l.Price
-				if incomingOrder.OrderType == "MARKET" {
-					usersBalancesMap[askUserId].Balance["ETH"] -= incomingOrder.Size
-				}
-			}
-			l.TotalVolume = l.TotalVolume - incomingOrder.Size
-			existingOrder.Size = existingOrder.Size - incomingOrder.Size
-			incomingOrder.Size = 0
+		var bid *Order
+		var ask *Order
+
+		if incomingOrder.IsBid {
+			bid = incomingOrder
+			ask = existingOrder
 		} else {
-			if incomingOrder.IsBid {
-				matchArray = append(matchArray, Match{
-					BidID:      incomingOrder.ID,
-					AskID:      existingOrder.ID,
-					Price:      l.Price,
-					SizeFilled: existingOrder.Size,
-				})
-				bidUserId := incomingOrder.UserId
-				askUserId := existingOrder.UserId
-				usersBalancesMap[bidUserId].Balance["ETH"] += existingOrder.Size
-				usersBalancesMap[askUserId].Balance["USD"] += existingOrder.Size * l.Price
-				if incomingOrder.OrderType == "MARKET" {
-					usersBalancesMap[bidUserId].Balance["USD"] -= incomingOrder.Size * l.Price
-				}
-			} else {
-				matchArray = append(matchArray, Match{
-					BidID:      existingOrder.ID,
-					AskID:      incomingOrder.ID,
-					Price:      l.Price,
-					SizeFilled: existingOrder.Size,
-				})
-				bidUserId := existingOrder.UserId
-				askUserId := incomingOrder.UserId
-				usersBalancesMap[bidUserId].Balance["ETH"] += existingOrder.Size
-				usersBalancesMap[askUserId].Balance["USD"] += existingOrder.Size * l.Price
-				if incomingOrder.OrderType == "MARKET" {
-					usersBalancesMap[askUserId].Balance["ETH"] -= incomingOrder.Size
-				}
-			}
-			l.TotalVolume = l.TotalVolume - existingOrder.Size
-			incomingOrder.Size = incomingOrder.Size - existingOrder.Size
-			existingOrder.Size = 0
+			ask = incomingOrder
+			bid = existingOrder
 		}
+		var smallerOrder *Order
+		var biggerOrder *Order
+
+		if existingOrder.Size >= incomingOrder.Size {
+			biggerOrder = existingOrder
+			smallerOrder = incomingOrder
+		} else {
+			smallerOrder = existingOrder
+			biggerOrder = incomingOrder
+		}
+
+		match := Match{
+			// BidID:      bid.ID,
+			BidOrder: bid,
+			AskOrder: ask,
+			// AskID:      ask.ID,
+			Price:      l.Price,
+			SizeFilled: smallerOrder.Size,
+		}
+		// fmt.Println(match)
+		matchArray = append(matchArray, match)
+
+		l.TotalVolume = l.TotalVolume - smallerOrder.Size
+		biggerOrder.Size = biggerOrder.Size - smallerOrder.Size
+		smallerOrder.Size = 0
+
 		if existingOrder.isFilled() {
 			l.DeleteOrder(existingOrder)
 		}
@@ -201,23 +171,23 @@ func (ls BidLimitsInterface) Len() int {
 }
 
 type OrderBook struct {
-	UsersBalances  users.Users
-	AskLimits      AskLimitsInterface
-	BidLimits      BidLimitsInterface
-	PriceToAsksMap map[float64]*Limit
-	PriceToBidsMap map[float64]*Limit
-	IDToOrderMap   map[int]*Order
-	CurrentPrice   float64
-	mu             sync.Mutex
+	Users         users.Users
+	AskLimits     AskLimitsInterface
+	BidLimits     BidLimitsInterface
+	PriceToAskMap map[float64]*Limit
+	PriceToBidMap map[float64]*Limit
+	IDToOrderMap  map[int]*Order
+	CurrentPrice  float64
+	mu            sync.Mutex
 }
 
 func NewOrderbook(idToUserMap *users.Users) *OrderBook {
 	// w/o make :  assignment to entry in nil map
 	return &OrderBook{
-		UsersBalances:  *idToUserMap,
-		PriceToAsksMap: make(map[float64]*Limit),
-		PriceToBidsMap: make(map[float64]*Limit),
-		IDToOrderMap:   make(map[int]*Order),
+		Users:         *idToUserMap,
+		PriceToAskMap: make(map[float64]*Limit),
+		PriceToBidMap: make(map[float64]*Limit),
+		IDToOrderMap:  make(map[int]*Order),
 	}
 }
 
@@ -229,18 +199,18 @@ func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
 
 	// find the limit object with the corresponding price
 	if o.IsBid {
-		limit = ob.PriceToBidsMap[price]
+		limit = ob.PriceToBidMap[price]
 	} else {
-		limit = ob.PriceToAsksMap[price]
+		limit = ob.PriceToAskMap[price]
 	}
 	if limit == nil {
-		limit = NewLimit(price, ob)
+		limit = NewLimit(price, ob, o.IsBid)
 		if o.IsBid {
 			ob.BidLimits = append(ob.BidLimits, limit)
-			ob.PriceToBidsMap[price] = limit
+			ob.PriceToBidMap[price] = limit
 		} else {
 			ob.AskLimits = append(ob.AskLimits, limit)
-			ob.PriceToAsksMap[price] = limit
+			ob.PriceToAskMap[price] = limit
 		}
 	}
 
@@ -255,28 +225,51 @@ func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
 	limit.AddOrder(o)
 }
 
-func (ob *OrderBook) sortAskLimits() {
+func (ob *OrderBook) GetBestAsk() Limit {
 	// sort.Sort takes in as argument that implement a certain interface.
 	sort.Sort(ob.AskLimits)
-}
-
-func (ob *OrderBook) sortBidLimits() {
-	// sort.Sort takes in as argument that implement a certain interface.
-	sort.Sort(ob.BidLimits)
-}
-
-func (ob *OrderBook) GetBestAsk() Limit {
-	ob.sortAskLimits()
+	if len(ob.BidLimits) == 0 {
+		return *NewLimit(0, nil, false)
+	}
 	return *ob.AskLimits[0]
 }
 
 func (ob *OrderBook) GetBestBid() Limit {
-	ob.sortBidLimits()
+	sort.Sort(ob.BidLimits)
+	if len(ob.BidLimits) == 0 {
+		return *NewLimit(0, nil, true)
+	}
 	return *ob.BidLimits[0]
+}
+
+func (ob *OrderBook) clearLimit(limit *Limit) {
+	var limits []*Limit
+	if limit.isBid {
+		delete(ob.PriceToBidMap, limit.Price)
+		limits = ob.BidLimits
+	} else {
+		delete(ob.PriceToAskMap, limit.Price)
+		limits = ob.AskLimits
+	}
+	for index, toBeDeletedLimit := range limits {
+		if toBeDeletedLimit.Price == limit.Price {
+			limits[index] = limits[len(limits)-1]
+			if limit.isBid {
+				ob.BidLimits = ob.BidLimits[:len(ob.BidLimits)-1]
+			} else {
+				ob.AskLimits = ob.AskLimits[:len(ob.AskLimits)-1]
+			}
+			// horribly wrong here
+			// limits = limits[:len(limits)-1]
+			break
+		}
+	}
 }
 
 // fill at best price
 func (ob *OrderBook) PlaceMarketOrder(incomingOrder *Order) []Match {
+	ob.mu.Lock()
+	defer ob.mu.Unlock()
 	// check if there is enough liquidity
 	if incomingOrder.IsBid && incomingOrder.Size > ob.GetTotalVolumeAllAsks() {
 		panic("Not enough ask liquidity")
@@ -285,51 +278,39 @@ func (ob *OrderBook) PlaceMarketOrder(incomingOrder *Order) []Match {
 	}
 
 	matchArray := make([]Match, 0)
+	var limits []*Limit
+
 	// if bid, search for asks, starting from best price
+	// AskLimits/BidLimits should be sorted according to limit price
 	if incomingOrder.IsBid {
-		// ob.ask should be sorted according to limit price
-		ob.sortAskLimits()
-		for _, limit := range ob.AskLimits {
-			// inside a limit, orders should be sorted according to timestamp
-			matchArray = append(matchArray, limit.fill(incomingOrder)...)
-			ob.CurrentPrice = limit.Price
-			logrus.WithFields(logrus.Fields{
-				"currentPrice": ob.CurrentPrice,
-			}).Info("------")
-			// clear limit if there is no orders left inside
-			if len(limit.Orders) == 0 {
-				delete(ob.PriceToAsksMap, limit.Price)
-				for index, toBeDeletedLimit := range ob.AskLimits {
-					if toBeDeletedLimit.Price == limit.Price {
-						ob.AskLimits[index] = ob.AskLimits[len(ob.AskLimits)-1]
-						ob.AskLimits = ob.AskLimits[:len(ob.AskLimits)-1]
-						break
-					}
-				}
-			}
-		}
+		limits = ob.AskLimits
+		sort.Sort(AskLimitsInterface(limits))
 	} else {
-		ob.sortBidLimits()
-		for _, limit := range ob.BidLimits {
-			// inside a limit, orders should be sorted according to timestamp
-			matchArray = append(matchArray, limit.fill(incomingOrder)...)
-			ob.CurrentPrice = limit.Price
-			logrus.WithFields(logrus.Fields{
-				"currentPrice": ob.CurrentPrice,
-			}).Info("------")
-			if len(limit.Orders) == 0 {
-				delete(ob.PriceToBidsMap, limit.Price)
-				for index, toBeDeletedLimit := range ob.BidLimits {
-					if toBeDeletedLimit.Price == limit.Price {
-						ob.BidLimits[index] = ob.BidLimits[len(ob.BidLimits)-1]
-						ob.BidLimits = ob.BidLimits[:len(ob.BidLimits)-1]
-						break
-					}
-				}
-			}
+		limits = ob.BidLimits
+		sort.Sort(BidLimitsInterface(limits))
+	}
+
+	for _, limit := range limits {
+		// inside a limit, orders should be sorted according to timestamp
+		returnedArray := limit.fill(incomingOrder)
+		matchArray = append(matchArray, returnedArray...)
+		// clear limit if there is no orders left inside
+		if len(limit.Orders) == 0 {
+			ob.clearLimit(limit)
+		}
+
+		ob.CurrentPrice = limit.Price
+		logrus.WithFields(logrus.Fields{
+			"currentPrice": ob.CurrentPrice,
+		}).Info("------")
+
+		if incomingOrder.isFilled() {
+			break
 		}
 	}
-	logrus.Info("market order filled")
+	execute(matchArray, ob)
+
+	// logrus.Info("market order filled")
 	return matchArray
 }
 
@@ -355,8 +336,8 @@ func (ob *OrderBook) CancelOrder(o *Order) {
 }
 
 type Match struct {
-	AskID      int
-	BidID      int
+	AskOrder   *Order
+	BidOrder   *Order
 	SizeFilled float64
 	Price      float64
 }

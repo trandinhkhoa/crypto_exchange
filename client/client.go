@@ -69,7 +69,7 @@ func simulateFetchPriceFromOtherExchange() float64 {
 }
 
 func MakeMarket() {
-	ticker := time.NewTicker(1000 * time.Millisecond)
+	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
 		bestAskPrice, _ := GetBestAskPrice()
 		if bestAskPrice == 0 {
@@ -138,7 +138,7 @@ func PlaceOrder(order server.PlaceOrderRequest) error {
 func PlaceMarketRepeat() {
 	timer := time.NewTimer(1500 * time.Millisecond)
 	<-timer.C
-	ticker := time.NewTicker(1500 * time.Millisecond)
+	ticker := time.NewTicker(150 * time.Millisecond)
 	for {
 		isBid := true
 		if int(rand.Intn(9)) < 5 {

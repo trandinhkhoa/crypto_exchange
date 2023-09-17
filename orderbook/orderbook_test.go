@@ -47,7 +47,7 @@ func TestOrderBookPlaceLimitOrder(t *testing.T) {
 	ob.PlaceLimitOrder(20_000, sellOrder)
 
 	assert(t, ob.AskLimits.Len(), 2)
-	assert(t, len(ob.PriceToAsksMap), 2)
+	assert(t, len(ob.PriceToAskMap), 2)
 	assert(t, ob.GetTotalVolumeAllAsks(), float64(100))
 }
 
