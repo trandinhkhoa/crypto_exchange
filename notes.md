@@ -105,6 +105,7 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
     - https://www.gobeyond.dev/standard-package-layout/
     - https://blog.cleancoder.com/
     - https://manuel.kiessling.net/2012/09/28/applying-the-clean-architecture-to-go-applications/
+    - https://web.archive.org/web/20110219163448/http://howtohft.wordpress.com/2011/02/15/how-to-build-a-fast-limit-order-book/
 - current bugs:
     - fixed: users place sell market order, matched got usd back, but eth not deducted
     - place limit order high (sell), try to clear out buys to push the price, to see if the limit order is eventually filled
