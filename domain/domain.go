@@ -18,9 +18,10 @@ const (
 type Order struct {
 	id         int64
 	userId     string
+	ticker     string
 	isBid      bool
-	orderType  string
-	size       float64
+	orderType  OrderType
+	Size       float64
 	limitPrice float64
 	timestamp  int64
 	NextOrder  *Order
@@ -29,17 +30,19 @@ type Order struct {
 
 func NewOrder(
 	userId string,
+	ticker string,
 	isBid bool,
-	orderType string,
+	orderType OrderType,
 	size float64,
 	limitPrice float64) *Order {
 	return &Order{
 		// TODO: incremental unique id
 		id:         int64(rand.Int31()),
+		ticker:     ticker,
 		userId:     userId,
 		isBid:      isBid,
 		orderType:  orderType,
-		size:       size,
+		Size:       size,
 		limitPrice: limitPrice,
 		timestamp:  time.Now().UnixNano(),
 	}
@@ -47,18 +50,28 @@ func NewOrder(
 
 // implement Stringer interface
 func (o *Order) String() string {
-	return fmt.Sprintf("{id: %d userId: %s isBid: %t orderType: %s size: %.2f limitPrice: %.2f timestamp: %d }",
+	return fmt.Sprintf("{\"id\": %d, \"userId\": \"%s\", \"isBid\": %t, \"orderType\": \"%s\", \"size\": %.2f, \"limitPrice\": %.2f, \"timestamp\": %d }",
 		o.id,
 		o.userId,
 		o.isBid,
 		o.orderType,
-		o.size,
+		o.Size,
 		o.limitPrice,
 		o.timestamp)
 }
 
+func (o1 *Order) IsBetter(o2 *Order) bool {
+	if o1.isBid && o2.isBid {
+		return o1.limitPrice > o2.limitPrice
+	} else if !o1.isBid && !o2.isBid {
+		return o1.limitPrice < o2.limitPrice
+	} else {
+		// TODO: throw error if not bid-bid/ask-ask
+		panic("Cant compare if not bid-bid/ask-ask")
+	}
+}
 func (o *Order) IsFilled() bool {
-	return o.size == float64(0)
+	return o.Size == float64(0)
 }
 
 func (o *Order) GetId() int64 {
@@ -72,17 +85,17 @@ func (o *Order) GetId() int64 {
 // size       float64
 // limitPrice float64
 // timestamp  int64
-func (o *Order) GetUserId() string {
+func (o Order) GetUserId() string {
 	return o.userId
+}
+func (o Order) GetTicker() string {
+	return o.ticker
 }
 func (o *Order) GetIsBid() bool {
 	return o.isBid
 }
-func (o *Order) GetOrderType() string {
+func (o *Order) GetOrderType() OrderType {
 	return o.orderType
-}
-func (o *Order) GetSize() float64 {
-	return o.size
 }
 func (o *Order) GetLimitPrice() float64 {
 	return o.limitPrice
@@ -98,8 +111,24 @@ type Limit struct {
 	Parent      *Limit
 	LeftChild   *Limit
 	RightChild  *Limit
-	HeadOrder   *Order
-	TailOrder   *Order
+	//TODO: how to make HeadOrder/TailOrder "readonly"
+	HeadOrder *Order
+	TailOrder *Order
+}
+
+func (l Limit) String() string {
+	str := fmt.Sprintf("{\"limitPrice\": %.2f, \"totalVolume\": %.2f, \"orders\":", l.GetLimitPrice(), l.TotalVolume)
+	str += "["
+	iterator := l.HeadOrder
+	for iterator != nil {
+		str += iterator.String()
+		iterator = iterator.NextOrder
+		if iterator != nil {
+			str += ","
+		}
+	}
+	str += "]}"
+	return str
 }
 
 func NewLimit(limitPrice float64) *Limit {
@@ -108,10 +137,11 @@ func NewLimit(limitPrice float64) *Limit {
 	}
 }
 
-func (l *Limit) AddOrder(o *Order) {
-	// if o is a pointer and is assigned directly to l.HeadOrder,
-	// caller of this function may modify o after calling AddOrder and mess thing up
-	newOrder := NewOrder(o.userId, o.isBid, o.orderType, o.size, o.limitPrice)
+func (l *Limit) GetLimitPrice() float64 {
+	return l.limitPrice
+}
+
+func (l *Limit) AddOrder(newOrder *Order) {
 	if l.TailOrder == nil {
 		// if empty
 		l.HeadOrder = newOrder
@@ -121,7 +151,7 @@ func (l *Limit) AddOrder(o *Order) {
 		newOrder.PrevOrder = l.TailOrder
 		l.TailOrder = l.TailOrder.NextOrder
 	}
-	l.TotalVolume += float64(o.size)
+	l.TotalVolume += float64(newOrder.Size)
 	// TODO: throw error if sell limit but o is bid
 }
 
@@ -135,7 +165,7 @@ func (l *Limit) DeleteOrder(id int64) {
 		return
 	}
 
-	l.TotalVolume -= iterator.size
+	l.TotalVolume -= iterator.Size
 	if (iterator.PrevOrder == nil) && (iterator.NextOrder == nil) {
 		// if the only one left
 		l.HeadOrder = nil
@@ -153,4 +183,9 @@ func (l *Limit) DeleteOrder(id int64) {
 			nextOrder.PrevOrder = prevOrder
 		}
 	}
+}
+
+type User struct {
+	UserId  string
+	Balance map[string]float64
 }
