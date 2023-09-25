@@ -79,6 +79,7 @@ func TestPlaceLimitOrderExchange(t *testing.T) {
 	assert(t, ex.GetUsersMap()["jack"].Balance["ETH"], 1991.0)
 	assert(t, ex.GetUsersMap()["jack"].Balance["USD"], 2000.0)
 
+	// TODO: assert should not hide the line with the error
 	assert(t, ex.GetUsersMap()["lily"].Balance["ETH"], 2001.0)
 	assert(t, ex.GetUsersMap()["lily"].Balance["USD"], 1910.0)
 }

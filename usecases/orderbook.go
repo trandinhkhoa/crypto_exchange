@@ -95,6 +95,7 @@ func treeToArrayHelper(node *domain.Limit, array *[]*domain.Limit) {
 	}
 }
 
+// TODO: dont expose the pointer
 func TreeToArray(node *domain.Limit) []*domain.Limit {
 	array := make([]*domain.Limit, 0)
 	treeToArrayHelper(node, &array)

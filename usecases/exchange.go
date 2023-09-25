@@ -35,8 +35,12 @@ func (ex Exchange) GetUsersMap() map[string]domain.User {
 	return usersMap
 }
 
-func (ex Exchange) GetLastTrades(ticker string) []Trade {
-	return ex.orderbooksMap[Ticker(ticker)].lastTrades
+func (ex Exchange) GetLastTrades(ticker string, k int) []Trade {
+	length := len(ex.orderbooksMap[Ticker(ticker)].lastTrades)
+	if k > length {
+		return ex.orderbooksMap[Ticker(ticker)].lastTrades
+	}
+	return ex.orderbooksMap[Ticker(ticker)].lastTrades[length-k:]
 }
 
 func (ex *Exchange) PlaceLimitOrder(o domain.Order) {
@@ -58,7 +62,7 @@ func (ex *Exchange) PlaceLimitOrder(o domain.Order) {
 	ex.orderbooksMap[ticker].PlaceLimitOrder(o)
 }
 
-func (ex *Exchange) PlaceMarketOrder(o domain.Order) {
+func (ex *Exchange) PlaceMarketOrder(o domain.Order) []Trade {
 	// TODO: volume check
 	ticker := Ticker(o.GetTicker())
 	ticker1 := string(ticker[:3])
@@ -67,18 +71,24 @@ func (ex *Exchange) PlaceMarketOrder(o domain.Order) {
 	// match
 	tradesArray := ex.orderbooksMap[ticker].PlaceMarketOrder(o)
 	//execute
-	for _, value := range tradesArray {
-		buyer := ex.usersMap[value.buyer.GetUserId()]
-		seller := ex.usersMap[value.seller.GetUserId()]
-		buyer.Balance[ticker1] += value.size
-		buyer.Balance[ticker2] -= value.size * value.price
+	for _, trade := range tradesArray {
+		buyer := ex.usersMap[trade.buyer.GetUserId()]
+		seller := ex.usersMap[trade.seller.GetUserId()]
 
-		seller.Balance[ticker1] -= value.size
-		seller.Balance[ticker2] += value.size * value.price
+		buyer.Balance[ticker1] += trade.size
+		if trade.buyer.GetOrderType() == domain.MarketOrderType {
+			buyer.Balance[ticker2] -= trade.size * trade.price
+		}
+
+		if trade.seller.GetOrderType() == domain.MarketOrderType {
+			seller.Balance[ticker1] -= trade.size
+		}
+		seller.Balance[ticker2] += trade.size * trade.price
 	}
+	return tradesArray
 }
 
-func (ex *Exchange) RegisterUser(userId string) domain.User {
+func (ex *Exchange) RegisterUser(userId string) {
 	// TODO: should have an array of tickers, iterate it and set their balances to zeros
 	newUser := domain.User{
 		UserId:  userId,
@@ -86,7 +96,7 @@ func (ex *Exchange) RegisterUser(userId string) domain.User {
 	}
 	newUser.Balance[string(ETHUSD)[:3]] = 0
 	newUser.Balance[string(ETHUSD)[3:]] = 0
-	return newUser
+	ex.usersMap[userId] = &newUser
 }
 
 func (ex *Exchange) RegisterUserWithBalance(userId string, balance map[string]float64) {
@@ -96,4 +106,20 @@ func (ex *Exchange) RegisterUserWithBalance(userId string, balance map[string]fl
 		Balance: balance,
 	}
 	ex.usersMap[userId] = &newUser
+}
+
+func (ex *Exchange) GetBook(ticker string) ([]*domain.Limit, float64, []*domain.Limit, float64) {
+	buybook := TreeToArray(ex.orderbooksMap[Ticker(ticker)].BuyTree)
+	buyVolume := ex.orderbooksMap[Ticker(ticker)].GetTotalVolumeAllBuys()
+	sellbook := TreeToArray(ex.orderbooksMap[Ticker(ticker)].SellTree)
+	sellVolume := ex.orderbooksMap[Ticker(ticker)].GetTotalVolumeAllSells()
+	return buybook, buyVolume, sellbook, sellVolume
+}
+
+func (ex *Exchange) GetBestBuy(ticker string) float64 {
+	return ex.orderbooksMap[Ticker(ticker)].HighestBuy.GetLimitPrice()
+}
+
+func (ex *Exchange) GetBestSell(ticker string) float64 {
+	return ex.orderbooksMap[Ticker(ticker)].LowestSell.GetLimitPrice()
 }

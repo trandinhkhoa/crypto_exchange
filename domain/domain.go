@@ -185,6 +185,7 @@ func (l *Limit) DeleteOrder(id int64) {
 	}
 }
 
+// TODO: user need crypto wallet
 type User struct {
 	UserId  string
 	Balance map[string]float64

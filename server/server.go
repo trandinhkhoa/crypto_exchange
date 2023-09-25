@@ -3,18 +3,14 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"runtime/debug"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/sirupsen/logrus"
-	"github.com/trandinhkhoa/crypto-exchange/orderbook"
-	"github.com/trandinhkhoa/crypto-exchange/users"
+	"github.com/trandinhkhoa/crypto-exchange/domain"
+	"github.com/trandinhkhoa/crypto-exchange/usecases"
 	"golang.org/x/net/websocket"
 )
 
@@ -25,8 +21,10 @@ type OrderBookData struct {
 	Bids            []*OrderData
 }
 
+// TODO: perhaps user'id should not come from the body
 type OrderData struct {
 	ID        int
+	UserId    int
 	IsBid     bool
 	Size      float64
 	Price     float64
@@ -40,88 +38,62 @@ type MatchData struct {
 	Price      float64
 }
 
-type OrderType string
-
-const (
-	MarketOrderType OrderType = "MARKET"
-	LimitOrderType  OrderType = "LIMIT"
-)
-
-type MarketType string
-
-const (
-	ETHMarketType MarketType = "ETH"
-)
-
 // fields need to be visible to outer packages since this struct will be used by package json
 type PlaceOrderRequest struct {
-	UserId string
-	Type   OrderType // limit or market
-	IsBid  bool
-	Size   float64
-	Price  float64
-	Market MarketType
+	UserId    string
+	OrderType domain.OrderType // limit or market
+	IsBid     bool
+	Size      float64
+	Price     float64
+	Ticker    string
 }
 
-type Exchange struct {
-	orderbooks  map[MarketType]*orderbook.OrderBook
-	idToUserMap map[string]*users.User
-	hotWallet   *users.Wallet
+type WebServiceHandler struct {
+	ex *usecases.Exchange
 }
 
-func NewExchange() *Exchange {
-	aMap := make(map[MarketType]*orderbook.OrderBook)
-	usersMap := make(map[string]*users.User)
-	aMap[ETHMarketType] = orderbook.NewOrderbook((*users.Users)(&usersMap))
-	return &Exchange{
-		orderbooks:  aMap,
-		idToUserMap: usersMap,
-		// TODO: what if no &
-		hotWallet: &users.Wallet{
-			PublicKey:  "",
-			PrivateKey: "",
-			Address:    "",
-		},
-	}
+func NewWebServiceHandler(ex *usecases.Exchange) *WebServiceHandler {
+	handler := WebServiceHandler{}
+	handler.ex = ex
+	return &handler
 }
 
-func (ex *Exchange) handlePlaceOrder(c echo.Context) error {
+func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 	var placeOrderData PlaceOrderRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&placeOrderData); err != nil {
 		return err
 	}
-	incomingOrder := orderbook.NewOrder(
-		placeOrderData.IsBid,
-		placeOrderData.Size,
+	incomingOrder := domain.NewOrder(
 		placeOrderData.UserId,
-		string(placeOrderData.Type),
+		placeOrderData.Ticker,
+		placeOrderData.IsBid,
+		placeOrderData.OrderType,
+		placeOrderData.Size,
+		placeOrderData.Price,
 	)
-	if placeOrderData.Type == MarketOrderType {
-		matches := ex.orderbooks[placeOrderData.Market].PlaceMarketOrder(incomingOrder)
+
+	if placeOrderData.OrderType == domain.MarketOrderType {
+		matches := handler.ex.PlaceMarketOrder(*incomingOrder)
 		return c.JSON(200, map[string]interface{}{"matches": matches})
 	} else {
-		user := ex.idToUserMap[incomingOrder.UserId]
-		if incomingOrder.IsBid {
-			user.Balance["USD"] -= incomingOrder.Price * incomingOrder.Size
-		} else {
-			user.Balance["ETH"] -= incomingOrder.Size
-		}
-		ex.orderbooks[placeOrderData.Market].PlaceLimitOrder(placeOrderData.Price, incomingOrder)
+		handler.ex.PlaceLimitOrder(*incomingOrder)
 		return c.JSON(200, map[string]interface{}{
 			"msg": "limit order placed",
 			"order": OrderData{
-				ID:        incomingOrder.ID,
-				IsBid:     incomingOrder.IsBid,
+				ID:        int(incomingOrder.GetId()),
+				IsBid:     incomingOrder.GetIsBid(),
 				Size:      incomingOrder.Size,
-				Price:     incomingOrder.Price,
-				Timestamp: incomingOrder.Timestamp,
+				Price:     incomingOrder.GetLimitPrice(),
+				Timestamp: incomingOrder.GetTimeStamp(),
 			},
 		})
 	}
 }
 
-func (ex *Exchange) handleGetBook(c echo.Context) error {
-	marketType := MarketType(c.Param("market"))
+func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
+	// TODO: "market" -> "ticker"
+	// TODO: should not need to convert to usescase.TIcker
+	ticker := usecases.Ticker(c.Param("market"))
 	orderBookData := OrderBookData{
 		TotalAsksVolume: 0.0,
 		TotalBidsVolume: 0.0,
@@ -129,80 +101,86 @@ func (ex *Exchange) handleGetBook(c echo.Context) error {
 		Bids:            make([]*OrderData, 0),
 	}
 
-	for _, iterator := range ex.orderbooks[marketType].AskLimits {
-		for _, order := range iterator.Orders {
+	buybook, bVolume, sellbook, sVolume := handler.ex.GetBook(string(ticker))
+	// TODO: controller layer should not depend/know the implementation of the book like this
+	// (the fact that the book is a tree)
+	for _, limit := range buybook {
+		order := limit.HeadOrder
+		for order != nil {
 			orderData := &OrderData{
-				ID:        order.ID,
-				IsBid:     order.IsBid,
+				ID:        int(order.GetId()),
+				IsBid:     order.GetIsBid(),
 				Size:      order.Size,
-				Price:     order.Price,
-				Timestamp: order.Timestamp,
-			}
-			orderBookData.Asks = append(orderBookData.Asks, orderData)
-		}
-	}
-	for _, iterator := range ex.orderbooks[marketType].BidLimits {
-		for _, order := range iterator.Orders {
-			orderData := &OrderData{
-				ID:        order.ID,
-				IsBid:     order.IsBid,
-				Size:      order.Size,
-				Price:     order.Price,
-				Timestamp: order.Timestamp,
+				Price:     order.GetLimitPrice(),
+				Timestamp: order.GetTimeStamp(),
 			}
 			orderBookData.Bids = append(orderBookData.Bids, orderData)
 		}
 	}
-	orderBookData.TotalAsksVolume += ex.orderbooks[marketType].GetTotalVolumeAllAsks()
-	orderBookData.TotalBidsVolume += ex.orderbooks[marketType].GetTotalVolumeAllBids()
+	for _, limit := range sellbook {
+		order := limit.HeadOrder
+		for order != nil {
+			orderData := &OrderData{
+				ID:        int(order.GetId()),
+				IsBid:     order.GetIsBid(),
+				Size:      order.Size,
+				Price:     order.GetLimitPrice(),
+				Timestamp: order.GetTimeStamp(),
+			}
+			orderBookData.Asks = append(orderBookData.Asks, orderData)
+		}
+	}
+	orderBookData.TotalAsksVolume = sVolume
+	orderBookData.TotalBidsVolume = bVolume
 
 	return c.JSON(200, orderBookData)
 }
 
-func (ex *Exchange) handleGetCurrentPrice(c echo.Context) error {
-	marketType := MarketType(c.Param("market"))
-	currentPrice := ex.orderbooks[marketType].CurrentPrice
+func (handler WebServiceHandler) HandleGetCurrentPrice(c echo.Context) error {
+	ticker := c.Param("market")
+	lastTrades := handler.ex.GetLastTrades(ticker, 1)
+	currentPrice := lastTrades[0].GetPrice()
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"currentPrice": currentPrice,
 	})
 }
 
-func (ex *Exchange) handleGetBestAsk(c echo.Context) error {
-	marketType := MarketType(c.Param("market"))
-	bestAskPrice := ex.orderbooks[marketType].GetBestAsk().Price
+func (handler WebServiceHandler) HandleGetBestAsk(c echo.Context) error {
+	ticker := c.Param("market")
+	bestAskPrice := handler.ex.GetBestSell(ticker)
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"bestAskPrice": bestAskPrice,
 	})
 }
 
-func (ex *Exchange) handleGetBestBid(c echo.Context) error {
-	marketType := MarketType(c.Param("market"))
-	bestBidPrice := ex.orderbooks[marketType].GetBestBid().Price
+func (handler WebServiceHandler) HandleGetBestBid(c echo.Context) error {
+	ticker := c.Param("market")
+	bestBidPrice := handler.ex.GetBestBuy(ticker)
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"bestBidPrice": bestBidPrice,
 	})
 }
 
-func (ex *Exchange) handleCancelOrder(c echo.Context) error {
+func (handler WebServiceHandler) HandleCancelOrder(c echo.Context) error {
 	resp := "handleCancelOrder"
-	cancelledOrderID, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		// ... handle error
-		// TODO: check if this is executed
-		return err
-	}
-	// for now, assuming we will only ever have 1 market ETH
-	order, ok := ex.orderbooks[ETHMarketType].IDToOrderMap[cancelledOrderID]
-	if ok {
-		ex.orderbooks[ETHMarketType].CancelOrder(order)
-	} else {
-		// TODO: check if this is executed
-		panic("order not found")
-	}
+	// cancelledOrderID, err := strconv.Atoi(c.Param("id"))
+	// if err != nil {
+	// 	// ... handle error
+	// 	// TODO: check if this is executed
+	// 	return err
+	// }
+	// // for now, assuming we will only ever have 1 market ETH
+	// order, ok := ex.orderbooks[ETHMarketType].IDToOrderMap[cancelledOrderID]
+	// if ok {
+	// 	ex.orderbooks[ETHMarketType].CancelOrder(order)
+	// } else {
+	// 	// TODO: check if this is executed
+	// 	panic("order not found")
+	// }
 	return c.JSON(200, resp)
 }
 
-// not a good idea to always return 400
+// TODO: dont always return 400
 func httpErrorHandler(err error, c echo.Context) {
 	fmt.Println(err)
 	c.JSON(http.StatusBadRequest, err)
@@ -237,12 +215,16 @@ func PanicRecoveryMiddleware() echo.MiddlewareFunc {
 }
 
 // this function is called everytime a client connect to the websocket
-func (ex *Exchange) WebSocketHandler(ws *websocket.Conn) {
-	lastCurrentPrice := ex.orderbooks["ETH"].CurrentPrice
+func (handler WebServiceHandler) WebSocketHandler(ws *websocket.Conn) {
+	// TODO: let client choose ticker
+	ticker := "ETHUSD"
+	lastTrades := handler.ex.GetLastTrades(ticker, 1)
+	lastCurrentPrice := lastTrades[0].GetPrice()
 	fmt.Println("Hi I am WebSocketHandler")
 
 	for {
-		currentPrice := ex.orderbooks["ETH"].CurrentPrice
+		lastTrades = handler.ex.GetLastTrades(ticker, 1)
+		currentPrice := lastTrades[0].GetPrice()
 		if currentPrice != lastCurrentPrice {
 			lastCurrentPrice = currentPrice
 			msg := fmt.Sprint(currentPrice)
@@ -260,43 +242,27 @@ func (ex *Exchange) WebSocketHandler(ws *websocket.Conn) {
 	}
 }
 
-func generateRandomString() string {
-	prefix := "id"
-	length := 10
-	source := rand.NewSource(time.Now().UnixNano())
-	randomizer := rand.New(source)
-
-	letterRunes := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-
-	b := strings.Builder{}
-	b.WriteString(prefix)
-
-	for i := 0; i < length-len(prefix); i++ {
-		randomIndex := randomizer.Intn(len(letterRunes))
-		b.WriteRune(letterRunes[randomIndex])
-	}
-
-	return b.String()
+// TODO:
+func (handler WebServiceHandler) registerUser(c echo.Context) {
 }
 
-func (ex *Exchange) RegisterUser(newUser *users.User) {
-	// TODO: check new id uniqueness
-	ex.idToUserMap[newUser.Id] = newUser
+// TODO: dont return all details about users ?
+// or maybe check the right of the requester
+func (handler WebServiceHandler) HandleGetUsers(c echo.Context) error {
+	return c.JSON(200, handler.ex.GetUsersMap())
 }
 
-func (ex *Exchange) handleGetUsers(c echo.Context) error {
-	return c.JSON(200, ex.idToUserMap)
-}
-
-func (ex *Exchange) handleGetUser(c echo.Context) error {
+// TODO: dont return all details about users ?
+func (handler WebServiceHandler) HandleGetUser(c echo.Context) error {
 	userId := c.Param("userId")
-	user, ok := ex.idToUserMap[userId]
+	user, ok := handler.ex.GetUsersMap()[userId]
 	if !ok {
 		return c.JSON(404, fmt.Sprintf("UserId %s does not exist", userId))
 	}
 	return c.JSON(200, user)
 }
 
+// TODO: this is infrastructure code. need to separate it from the controller above
 func StartServer() {
 	e := echo.New()
 	// Recover middleware to catch panics
@@ -309,45 +275,42 @@ func StartServer() {
 	// 	log.Fatal(err)
 	// }
 
-	ex := NewExchange()
-	ex.RegisterUser(&users.User{
-		// Id:         generateRandomString(),
-		Id:         "maker123",
-		PrivateKey: "",
-		Balance: map[string]float64{
+	handler := WebServiceHandler{}
+	ex := usecases.NewExchange()
+
+	handler.ex = ex
+
+	handler.ex.RegisterUserWithBalance("maker123",
+		map[string]float64{
 			"ETH": 10000.0,
 			"USD": 1000000.0,
 		},
-	})
-	ex.RegisterUser(&users.User{
-		Id:         "traderJoe123",
-		PrivateKey: "",
-		Balance: map[string]float64{
+	)
+	handler.ex.RegisterUserWithBalance("traderJoe123",
+		map[string]float64{
 			"ETH": 10.0,
-			"USD": 1010.0,
+			"USD": 1000.0,
 		},
-	})
-	ex.RegisterUser(&users.User{
-		Id:         "mememe",
-		PrivateKey: "",
-		Balance: map[string]float64{
+	)
+	handler.ex.RegisterUserWithBalance("me",
+		map[string]float64{
 			"ETH": 0.0,
-			"USD": 1010.0,
+			"USD": 1000.0,
 		},
-	})
+	)
 
-	e.POST("/order", ex.handlePlaceOrder)
+	e.POST("/order", handler.HandlePlaceOrder)
 
-	e.GET("/users", ex.handleGetUsers)
-	e.GET("/users/:userId", ex.handleGetUser)
-	e.GET("/book/:market", ex.handleGetBook)
-	e.GET("/book/:market/currentPrice", ex.handleGetCurrentPrice)
-	e.GET("/book/:market/bestAsk", ex.handleGetBestAsk)
-	e.GET("/book/:market/bestBid", ex.handleGetBestBid)
+	e.GET("/users", handler.HandleGetUsers)
+	e.GET("/users/:userId", handler.HandleGetUser)
+	e.GET("/book/:market", handler.HandleGetBook)
+	e.GET("/book/:market/currentPrice", handler.HandleGetCurrentPrice)
+	e.GET("/book/:market/bestAsk", handler.HandleGetBestAsk)
+	e.GET("/book/:market/bestBid", handler.HandleGetBestBid)
 
-	e.DELETE("/order/:id", ex.handleCancelOrder)
+	e.DELETE("/order/:id", handler.HandleCancelOrder)
 
-	e.GET("/ws/currentPrice", echo.WrapHandler(websocket.Handler(ex.WebSocketHandler)))
+	e.GET("/ws/currentPrice", echo.WrapHandler(websocket.Handler(handler.WebSocketHandler)))
 
 	e.Start(":3000")
 }

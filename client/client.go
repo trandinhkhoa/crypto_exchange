@@ -8,18 +8,19 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/trandinhkhoa/crypto-exchange/orderbook"
+	"github.com/trandinhkhoa/crypto-exchange/domain"
 	"github.com/trandinhkhoa/crypto-exchange/server"
+	"github.com/trandinhkhoa/crypto-exchange/usecases"
 )
 
 const exchangeDomain = "http://localhost:3000"
 
 type PlaceLimitOrderResponseBody struct {
 	Msg   string
-	Order orderbook.Order
+	Order domain.Order
 }
 type PlaceMarketOrderResponseBody struct {
-	Matches []orderbook.Match
+	Matches []usecases.Trade
 }
 
 type CurrentPriceResponseBody struct {
@@ -34,7 +35,7 @@ type BestBidPriceResponseBody struct {
 }
 
 func GetCurrentPrice() (float64, error) {
-	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeDomain+"/book/ETH/currentPrice", nil)
+	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeDomain+"/book/ETHUSD/currentPrice", nil)
 	respPrice, _ := http.DefaultClient.Do(reqPrice)
 	decodedRespPrice := &CurrentPriceResponseBody{}
 	if err := json.NewDecoder(respPrice.Body).Decode(decodedRespPrice); err != nil {
@@ -45,7 +46,7 @@ func GetCurrentPrice() (float64, error) {
 }
 
 func GetBestAskPrice() (float64, error) {
-	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeDomain+"/book/ETH/bestAsk", nil)
+	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeDomain+"/book/ETHUSD/bestAsk", nil)
 	respPrice, _ := http.DefaultClient.Do(reqPrice)
 	decodedRespPrice := &BestAskPriceResponseBody{}
 	if err := json.NewDecoder(respPrice.Body).Decode(decodedRespPrice); err != nil {
@@ -55,7 +56,7 @@ func GetBestAskPrice() (float64, error) {
 }
 
 func GetBestBidPrice() (float64, error) {
-	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeDomain+"/book/ETH/bestBid", nil)
+	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeDomain+"/book/ETHUSD/bestBid", nil)
 	respPrice, _ := http.DefaultClient.Do(reqPrice)
 	decodedRespPrice := &BestBidPriceResponseBody{}
 	if err := json.NewDecoder(respPrice.Body).Decode(decodedRespPrice); err != nil {
@@ -82,20 +83,20 @@ func MakeMarket() {
 		}
 
 		askBody := server.PlaceOrderRequest{
-			UserId: "maker123",
-			Type:   "LIMIT",
-			IsBid:  false,
-			Size:   1,
-			Price:  bestAskPrice + 1,
-			Market: "ETH",
+			UserId:    "maker123",
+			OrderType: "LIMIT",
+			IsBid:     false,
+			Size:      1,
+			Price:     bestAskPrice + 1,
+			Ticker:    "ETHUSD",
 		}
 		bidBody := server.PlaceOrderRequest{
-			UserId: "maker123",
-			Type:   "LIMIT",
-			IsBid:  true,
-			Size:   1,
-			Price:  bestBidPrice - 1,
-			Market: "ETH",
+			UserId:    "maker123",
+			OrderType: "LIMIT",
+			IsBid:     true,
+			Size:      1,
+			Price:     bestBidPrice - 1,
+			Ticker:    "ETHUSD",
 		}
 		PlaceOrder(askBody)
 		PlaceOrder(bidBody)
@@ -121,7 +122,7 @@ func PlaceOrder(order server.PlaceOrderRequest) error {
 	}
 
 	var decodedResp any
-	if order.Type == "LIMIT" {
+	if order.OrderType == "LIMIT" {
 		decodedResp = &PlaceLimitOrderResponseBody{}
 	} else {
 		decodedResp = &PlaceMarketOrderResponseBody{}
@@ -145,11 +146,11 @@ func PlaceMarketRepeat() {
 			isBid = false
 		}
 		askBody := server.PlaceOrderRequest{
-			UserId: "traderJoe123",
-			Type:   "MARKET",
-			IsBid:  isBid,
-			Size:   1,
-			Market: "ETH",
+			UserId:    "traderJoe123",
+			OrderType: "MARKET",
+			IsBid:     isBid,
+			Size:      1,
+			Ticker:    "ETHUSD",
 		}
 		PlaceOrder(askBody)
 		<-ticker.C
