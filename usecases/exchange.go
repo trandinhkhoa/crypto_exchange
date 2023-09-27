@@ -69,6 +69,8 @@ func (ex *Exchange) PlaceMarketOrder(o domain.Order) []Trade {
 	ticker2 := string(ticker[3:])
 
 	// match
+	// TODO: PlaceMarketOrder() should not modify the orderbook.
+	// Market Buyer/Seller might not have sufficient balance and there is no way to check it before calling PlaceMarketOrder
 	tradesArray := ex.orderbooksMap[ticker].PlaceMarketOrder(o)
 	//execute
 	for _, trade := range tradesArray {
@@ -117,10 +119,18 @@ func (ex *Exchange) GetBook(ticker string) ([]*domain.Limit, float64, []*domain.
 }
 
 func (ex *Exchange) GetBestBuy(ticker string) float64 {
+	if ex.orderbooksMap[Ticker(ticker)].HighestBuy == nil {
+		// TODO: return error instead
+		return 0
+	}
 	return ex.orderbooksMap[Ticker(ticker)].HighestBuy.GetLimitPrice()
 }
 
 func (ex *Exchange) GetBestSell(ticker string) float64 {
+	if ex.orderbooksMap[Ticker(ticker)].LowestSell == nil {
+		// TODO: return error instead
+		return 0
+	}
 	return ex.orderbooksMap[Ticker(ticker)].LowestSell.GetLimitPrice()
 }
 

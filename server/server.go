@@ -32,11 +32,10 @@ type OrderData struct {
 	Timestamp int64
 }
 
-type MatchData struct {
-	Ask        OrderData
-	Bid        OrderData
-	SizeFilled float64
-	Price      float64
+type TradeData struct {
+	Price     float64
+	Size      float64
+	Timestamp int64
 }
 
 // fields need to be visible to outer packages since this struct will be used by package json
@@ -61,6 +60,7 @@ func NewWebServiceHandler(ex *usecases.Exchange) *WebServiceHandler {
 
 func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 	var placeOrderData PlaceOrderRequest
+	// TODO: check if msg body has all the required fields
 	if err := json.NewDecoder(c.Request().Body).Decode(&placeOrderData); err != nil {
 		return err
 	}
@@ -73,9 +73,25 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 		placeOrderData.Price,
 	)
 
+	// TODO: check if userid exist
+	_, ok := handler.ex.GetUsersMap()[placeOrderData.UserId]
+	if !ok {
+		msg := fmt.Sprintf("userId %s does not exist", placeOrderData.UserId)
+		return c.JSON(400, map[string]interface{}{"msg": msg})
+	}
+
 	if placeOrderData.OrderType == domain.MarketOrderType {
-		matches := handler.ex.PlaceMarketOrder(*incomingOrder)
-		return c.JSON(200, map[string]interface{}{"matches": matches})
+		trades := handler.ex.PlaceMarketOrder(*incomingOrder)
+		tradesDataArray := make([]TradeData, 0)
+		for _, trade := range trades {
+			tradeData := &TradeData{
+				Timestamp: trade.GetTimeStamp(),
+				Price:     trade.GetPrice(),
+				Size:      trade.GetSize(),
+			}
+			tradesDataArray = append(tradesDataArray, *tradeData)
+		}
+		return c.JSON(200, map[string]interface{}{"matches": tradesDataArray})
 	} else {
 		handler.ex.PlaceLimitOrder(*incomingOrder)
 		return c.JSON(200, map[string]interface{}{
@@ -105,7 +121,7 @@ func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
 
 	buybook, bVolume, sellbook, sVolume := handler.ex.GetBook(string(ticker))
 	// TODO: controller layer should not depend/know the implementation of the book like this
-	// (the fact that the book is a tree)
+	// (the fact that each price level (limit) is implemented as a linked list)
 	for _, limit := range buybook {
 		order := limit.HeadOrder
 		for order != nil {
@@ -117,6 +133,7 @@ func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
 				Timestamp: order.GetTimeStamp(),
 			}
 			orderBookData.Bids = append(orderBookData.Bids, orderData)
+			order = order.NextOrder
 		}
 	}
 	for _, limit := range sellbook {
@@ -130,6 +147,7 @@ func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
 				Timestamp: order.GetTimeStamp(),
 			}
 			orderBookData.Asks = append(orderBookData.Asks, orderData)
+			order = order.NextOrder
 		}
 	}
 	orderBookData.TotalAsksVolume = sVolume
@@ -141,6 +159,11 @@ func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
 func (handler WebServiceHandler) HandleGetCurrentPrice(c echo.Context) error {
 	ticker := c.Param("ticker")
 	lastTrades := handler.ex.GetLastTrades(ticker, 1)
+	if len(lastTrades) == 0 {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"msg": "no trades yet",
+		})
+	}
 	currentPrice := lastTrades[0].GetPrice()
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"currentPrice": currentPrice,
@@ -222,10 +245,14 @@ func (handler WebServiceHandler) WebSocketHandler(ws *websocket.Conn) {
 	for {
 		lastTrades = handler.ex.GetLastTrades(ticker, 1)
 		currentPrice := lastTrades[0].GetPrice()
+		if currentPrice == 0 {
+			fmt.Println("YOYOYO", lastTrades)
+		}
 		if currentPrice != lastCurrentPrice {
 			lastCurrentPrice = currentPrice
 			msg := fmt.Sprint(currentPrice)
 			// Send the received message back to the client
+
 			if err := websocket.Message.Send(ws, msg); err != nil {
 				fmt.Println("Can't send:", err)
 				break
@@ -301,7 +328,9 @@ func StartServer() {
 	e.GET("/users", handler.HandleGetUsers)
 	e.GET("/users/:userId", handler.HandleGetUser)
 	e.GET("/book/:ticker", handler.HandleGetBook)
+	// TODO: handle error when ticker does not exist
 	e.GET("/book/:ticker/currentPrice", handler.HandleGetCurrentPrice)
+	// TODO: handle error when this is called while no bid/ask is in the book
 	e.GET("/book/:ticker/bestAsk", handler.HandleGetBestAsk)
 	e.GET("/book/:ticker/bestBid", handler.HandleGetBestBid)
 
