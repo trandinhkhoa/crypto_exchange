@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -12,17 +13,10 @@ import (
 	"github.com/trandinhkhoa/crypto-exchange/usecases"
 )
 
-// func assert(t *testing.T, a, b any) {
-// 	if !reflect.DeepEqual(a, b) {
-// 		t.Errorf("%+v != %+v", a, b)
-// 	}
-// }
-
 func TestServerHandlePlaceOrder(t *testing.T) {
 	// Setting up the Echo server for testing
 	e := echo.New()
 
-	// Create the request body
 	orderBody := `{
 		"UserId" : "jane",
 		"OrderType": "LIMIT",
@@ -40,7 +34,6 @@ func TestServerHandlePlaceOrder(t *testing.T) {
 
 	c := e.NewContext(req, rec)
 
-	// Execute the handler
 	ex := usecases.NewExchange()
 	ex.RegisterUserWithBalance("jane",
 		map[string]float64{
@@ -51,6 +44,11 @@ func TestServerHandlePlaceOrder(t *testing.T) {
 	// TODO: return error if request body is not in correct format .e.g wrong json field name
 	if assert.NoError(t, handler.HandlePlaceOrder(c)) {
 		assert.Equal(t, http.StatusOK, rec.Code)
-		// assert.Equal(t, rec.Body.String(), "{\"msg\":\"limit order placed\"}")
+		pattern := `^{"msg":"limit order placed","order":{"ID":\d+,"UserId":"jane","IsBid":true,"Size":1,"Price":10000,"Timestamp":\d+}}\n$`
+
+		re, err := regexp.Compile(pattern)
+		assert.NoError(t, err)
+
+		assert.True(t, re.MatchString(rec.Body.String()), "\nExpected: %s \nActual: %s", pattern, rec.Body.String())
 	}
 }

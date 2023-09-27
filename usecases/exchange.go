@@ -18,7 +18,7 @@ type Exchange struct {
 func NewExchange() *Exchange {
 	newExchange := &Exchange{}
 	newExchange.usersMap = make(map[string]*domain.User, 0)
-	ethusdOrderbook := &Orderbook{}
+	ethusdOrderbook := NewOrderbook()
 	newExchange.orderbooksMap = map[Ticker]*Orderbook{}
 	newExchange.orderbooksMap[ETHUSD] = ethusdOrderbook
 
@@ -122,4 +122,18 @@ func (ex *Exchange) GetBestBuy(ticker string) float64 {
 
 func (ex *Exchange) GetBestSell(ticker string) float64 {
 	return ex.orderbooksMap[Ticker(ticker)].LowestSell.GetLimitPrice()
+}
+
+func (ex *Exchange) CancelOrder(orderId int64, ticker string) {
+	orderbook := ex.orderbooksMap[Ticker(ticker)]
+	userId, isBid, price, size := orderbook.CancelOrder(orderId)
+	user := ex.usersMap[userId]
+
+	ticker1 := string(ticker[:3])
+	ticker2 := string(ticker[3:])
+	if isBid {
+		user.Balance[ticker2] += size * price
+	} else {
+		user.Balance[ticker1] += size
+	}
 }

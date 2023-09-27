@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -24,7 +25,7 @@ type OrderBookData struct {
 // TODO: perhaps user'id should not come from the body
 type OrderData struct {
 	ID        int
-	UserId    int
+	UserId    string
 	IsBid     bool
 	Size      float64
 	Price     float64
@@ -41,7 +42,7 @@ type MatchData struct {
 // fields need to be visible to outer packages since this struct will be used by package json
 type PlaceOrderRequest struct {
 	UserId    string
-	OrderType domain.OrderType // limit or market
+	OrderType domain.OrderType // limit or ticker
 	IsBid     bool
 	Size      float64
 	Price     float64
@@ -81,6 +82,7 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 			"msg": "limit order placed",
 			"order": OrderData{
 				ID:        int(incomingOrder.GetId()),
+				UserId:    incomingOrder.GetUserId(),
 				IsBid:     incomingOrder.GetIsBid(),
 				Size:      incomingOrder.Size,
 				Price:     incomingOrder.GetLimitPrice(),
@@ -91,9 +93,9 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 }
 
 func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
-	// TODO: "market" -> "ticker"
+	// TODO: "ticker" -> "ticker"
 	// TODO: should not need to convert to usescase.TIcker
-	ticker := usecases.Ticker(c.Param("market"))
+	ticker := usecases.Ticker(c.Param("ticker"))
 	orderBookData := OrderBookData{
 		TotalAsksVolume: 0.0,
 		TotalBidsVolume: 0.0,
@@ -137,7 +139,7 @@ func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
 }
 
 func (handler WebServiceHandler) HandleGetCurrentPrice(c echo.Context) error {
-	ticker := c.Param("market")
+	ticker := c.Param("ticker")
 	lastTrades := handler.ex.GetLastTrades(ticker, 1)
 	currentPrice := lastTrades[0].GetPrice()
 	return c.JSON(http.StatusOK, map[string]interface{}{
@@ -146,7 +148,7 @@ func (handler WebServiceHandler) HandleGetCurrentPrice(c echo.Context) error {
 }
 
 func (handler WebServiceHandler) HandleGetBestAsk(c echo.Context) error {
-	ticker := c.Param("market")
+	ticker := c.Param("ticker")
 	bestAskPrice := handler.ex.GetBestSell(ticker)
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"bestAskPrice": bestAskPrice,
@@ -154,7 +156,7 @@ func (handler WebServiceHandler) HandleGetBestAsk(c echo.Context) error {
 }
 
 func (handler WebServiceHandler) HandleGetBestBid(c echo.Context) error {
-	ticker := c.Param("market")
+	ticker := c.Param("ticker")
 	bestBidPrice := handler.ex.GetBestBuy(ticker)
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"bestBidPrice": bestBidPrice,
@@ -162,22 +164,17 @@ func (handler WebServiceHandler) HandleGetBestBid(c echo.Context) error {
 }
 
 func (handler WebServiceHandler) HandleCancelOrder(c echo.Context) error {
-	resp := "handleCancelOrder"
-	// cancelledOrderID, err := strconv.Atoi(c.Param("id"))
-	// if err != nil {
-	// 	// ... handle error
-	// 	// TODO: check if this is executed
-	// 	return err
-	// }
-	// // for now, assuming we will only ever have 1 market ETH
-	// order, ok := ex.orderbooks[ETHMarketType].IDToOrderMap[cancelledOrderID]
-	// if ok {
-	// 	ex.orderbooks[ETHMarketType].CancelOrder(order)
-	// } else {
-	// 	// TODO: check if this is executed
-	// 	panic("order not found")
-	// }
-	return c.JSON(200, resp)
+	orderId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(400, map[string]interface{}{
+			"msg": "id not numeric",
+		})
+	}
+	ticker := c.Param("ticker")
+	handler.ex.CancelOrder(int64(orderId), ticker)
+	return c.JSON(200, map[string]interface{}{
+		"msg": "order cancelled",
+	})
 }
 
 // TODO: dont always return 400
@@ -303,12 +300,12 @@ func StartServer() {
 
 	e.GET("/users", handler.HandleGetUsers)
 	e.GET("/users/:userId", handler.HandleGetUser)
-	e.GET("/book/:market", handler.HandleGetBook)
-	e.GET("/book/:market/currentPrice", handler.HandleGetCurrentPrice)
-	e.GET("/book/:market/bestAsk", handler.HandleGetBestAsk)
-	e.GET("/book/:market/bestBid", handler.HandleGetBestBid)
+	e.GET("/book/:ticker", handler.HandleGetBook)
+	e.GET("/book/:ticker/currentPrice", handler.HandleGetCurrentPrice)
+	e.GET("/book/:ticker/bestAsk", handler.HandleGetBestAsk)
+	e.GET("/book/:ticker/bestBid", handler.HandleGetBestBid)
 
-	e.DELETE("/order/:id", handler.HandleCancelOrder)
+	e.DELETE("/order/:ticker/:id", handler.HandleCancelOrder)
 
 	e.GET("/ws/currentPrice", echo.WrapHandler(websocket.Handler(handler.WebSocketHandler)))
 

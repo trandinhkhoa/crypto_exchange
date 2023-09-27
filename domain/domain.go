@@ -16,16 +16,17 @@ const (
 // make sure outer packages using &Order{} cant use it
 // hiding the most essential info w/ lowercase
 type Order struct {
-	id         int64
-	userId     string
-	ticker     string
-	isBid      bool
-	orderType  OrderType
-	Size       float64
-	limitPrice float64
-	timestamp  int64
-	NextOrder  *Order
-	PrevOrder  *Order
+	id          int64
+	userId      string
+	ticker      string
+	isBid       bool
+	orderType   OrderType
+	Size        float64
+	limitPrice  float64
+	timestamp   int64
+	NextOrder   *Order
+	PrevOrder   *Order
+	ParentLimit *Limit
 }
 
 func NewOrder(
@@ -151,32 +152,24 @@ func (l *Limit) AddOrder(newOrder *Order) {
 		newOrder.PrevOrder = l.TailOrder
 		l.TailOrder = l.TailOrder.NextOrder
 	}
+	newOrder.ParentLimit = l
 	l.TotalVolume += float64(newOrder.Size)
 	// TODO: throw error if sell limit but o is bid
 }
 
-func (l *Limit) DeleteOrder(id int64) {
-	iterator := l.HeadOrder
-	for iterator != nil && iterator.id != id {
-		iterator = iterator.NextOrder
-	}
-	if iterator == nil {
-		// TODO: throw error deleted order not in list
-		return
-	}
-
-	l.TotalVolume -= iterator.Size
-	if (iterator.PrevOrder == nil) && (iterator.NextOrder == nil) {
+func (l *Limit) DeleteOrder(order *Order) {
+	l.TotalVolume -= order.Size
+	if (order.PrevOrder == nil) && (order.NextOrder == nil) {
 		// if the only one left
 		l.HeadOrder = nil
 		l.TailOrder = nil
-	} else if iterator.PrevOrder == nil {
+	} else if order.PrevOrder == nil {
 		// if deleting the head
-		l.HeadOrder = iterator.NextOrder
+		l.HeadOrder = order.NextOrder
 		l.HeadOrder.PrevOrder = nil
 	} else {
-		prevOrder := iterator.PrevOrder
-		nextOrder := iterator.NextOrder
+		prevOrder := order.PrevOrder
+		nextOrder := order.NextOrder
 		prevOrder.NextOrder = nextOrder
 		if nextOrder != nil {
 			// if not the last one

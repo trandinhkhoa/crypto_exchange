@@ -52,21 +52,23 @@ func NewTrade(
 	}
 }
 
-// Book
-//
-//	Limit *buyTree;
-//	Limit *sellTree;
-//	Limit *lowestSell;
-//	Limit *highestBuy;
 type Orderbook struct {
 	// TODO: limitation: this way the "interface" of Orderbook is tied to its implementation
 	// e.g. switch from BST to heap will be costly
 	// domain.Limit has the same issue
-	BuyTree    *domain.Limit
-	SellTree   *domain.Limit
-	LowestSell *domain.Limit
-	HighestBuy *domain.Limit
-	lastTrades []Trade
+	BuyTree      *domain.Limit
+	SellTree     *domain.Limit
+	LowestSell   *domain.Limit
+	HighestBuy   *domain.Limit
+	lastTrades   []Trade
+	idToOrderMap map[int64]*domain.Order
+}
+
+// TODO: hide all the pointers, make sure if &Orderbook{} is used it would be useless
+func NewOrderbook() *Orderbook {
+	return &Orderbook{
+		idToOrderMap: make(map[int64]*domain.Order),
+	}
 }
 
 func setupNewLimit(incomingOrder *domain.Order) *domain.Limit {
@@ -102,24 +104,24 @@ func TreeToArray(node *domain.Limit) []*domain.Limit {
 	return array
 }
 
-func travelLimitTreeAndAddNode(node *domain.Limit, incomingOrder domain.Order) *domain.Limit {
+func travelLimitTreeAndAddOrderToLimit(node *domain.Limit, incomingOrder *domain.Order) *domain.Limit {
 	if incomingOrder.GetLimitPrice() == node.HeadOrder.GetLimitPrice() {
-		node.AddOrder(&incomingOrder)
+		node.AddOrder(incomingOrder)
 		return nil
 	} else if incomingOrder.IsBetter(node.HeadOrder) {
 		if node.LeftChild != nil {
-			return travelLimitTreeAndAddNode(node.LeftChild, incomingOrder)
+			return travelLimitTreeAndAddOrderToLimit(node.LeftChild, incomingOrder)
 		} else {
-			newLimit := setupNewLimit(&incomingOrder)
+			newLimit := setupNewLimit(incomingOrder)
 			node.LeftChild = newLimit
 			newLimit.Parent = node
 			return newLimit
 		}
 	} else {
 		if node.RightChild != nil {
-			return travelLimitTreeAndAddNode(node.RightChild, incomingOrder)
+			return travelLimitTreeAndAddOrderToLimit(node.RightChild, incomingOrder)
 		} else {
-			newLimit := setupNewLimit(&incomingOrder)
+			newLimit := setupNewLimit(incomingOrder)
 			node.RightChild = newLimit
 			newLimit.Parent = node
 			return newLimit
@@ -136,7 +138,7 @@ func (ob *Orderbook) PlaceLimitOrder(incomingOrder domain.Order) {
 			ob.BuyTree = newLimit
 			ob.HighestBuy = newLimit
 		} else {
-			limit := travelLimitTreeAndAddNode(ob.BuyTree, incomingOrder)
+			limit := travelLimitTreeAndAddOrderToLimit(ob.BuyTree, &incomingOrder)
 			if limit != nil && limit.GetLimitPrice() > ob.HighestBuy.GetLimitPrice() {
 				ob.HighestBuy = limit
 			}
@@ -148,16 +150,17 @@ func (ob *Orderbook) PlaceLimitOrder(incomingOrder domain.Order) {
 			ob.SellTree = newLimit
 			ob.LowestSell = newLimit
 		} else {
-			limit := travelLimitTreeAndAddNode(ob.SellTree, incomingOrder)
+			limit := travelLimitTreeAndAddOrderToLimit(ob.SellTree, &incomingOrder)
 			if limit != nil && limit.GetLimitPrice() < ob.LowestSell.GetLimitPrice() {
 				ob.LowestSell = limit
 			}
 		}
 	}
+	ob.idToOrderMap[incomingOrder.GetId()] = &incomingOrder
 }
 
 func findLeftMost(node *domain.Limit) *domain.Limit {
-	if node.LeftChild != nil {
+	if node != nil && node.LeftChild != nil {
 		return findLeftMost(node.LeftChild)
 	} else {
 		return node
@@ -200,7 +203,7 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder domain.Order) []Trade {
 		biggerOrder.Size = biggerOrder.Size - sizeFilled
 		smallerOrder.Size = 0
 		if existingOrder.Size == 0 {
-			bestLimit.DeleteOrder(existingOrder.GetId())
+			bestLimit.DeleteOrder(existingOrder)
 		}
 
 		var buy *domain.Order
@@ -287,4 +290,88 @@ func (ob *Orderbook) GetTotalVolumeAllBuys() float64 {
 
 func (ob *Orderbook) GetLastTrades() []Trade {
 	return ob.lastTrades
+}
+
+func (ob *Orderbook) clearLimit(limit *domain.Limit, isBid bool) {
+
+	parent := limit.Parent
+	rightChild := limit.RightChild
+	leftMostOfRightSide := findLeftMost(rightChild)
+
+	// replace current node with leftMostOfRightSide
+	if leftMostOfRightSide != nil {
+		// detach leftMostOfRightSide from its parent
+		// leftMostOfRightSide.Parent == nil ?? -> leftMostOfRightSide == root
+		// ; but leftMostleftMostOfRightSide == current.Child -> impossible
+		if leftMostOfRightSide == leftMostOfRightSide.Parent.LeftChild {
+			leftMostOfRightSide.Parent.LeftChild = nil
+		}
+		if leftMostOfRightSide == leftMostOfRightSide.Parent.RightChild {
+			leftMostOfRightSide.Parent.RightChild = nil
+		}
+		leftMostOfRightSide.Parent = nil
+
+		// connect current parent to leftMostOfRightSide
+		if parent != nil && parent.LeftChild == limit {
+			parent.LeftChild = leftMostOfRightSide
+		} else if parent != nil && parent.RightChild == limit {
+			parent.RightChild = leftMostOfRightSide
+		}
+		leftMostOfRightSide.Parent = parent
+
+		// connect leftMostOfRightSide to current node's childs
+		leftMostOfRightSide.LeftChild = limit.LeftChild
+		if leftMostOfRightSide != limit.RightChild {
+			leftMostOfRightSide.RightChild = limit.RightChild
+		}
+		if limit.LeftChild != nil {
+			limit.LeftChild.Parent = leftMostOfRightSide
+		}
+		if limit.RightChild != nil {
+			limit.RightChild.Parent = leftMostOfRightSide
+		}
+
+		// detach current node
+		limit.Parent = nil
+		limit.LeftChild = nil
+		limit.RightChild = nil
+	} else {
+		// if right side empty, just move up left side
+		if parent != nil {
+			// if not root
+			if parent.LeftChild == limit {
+				parent.LeftChild = limit.LeftChild
+			} else {
+				parent.RightChild = limit.LeftChild
+			}
+		} else {
+			if isBid {
+				ob.BuyTree = limit.LeftChild
+			} else {
+				ob.SellTree = limit.LeftChild
+			}
+		}
+	}
+}
+
+func (ob *Orderbook) CancelOrder(orderId int64) (string, bool, float64, float64) {
+	order, ok := ob.idToOrderMap[orderId]
+	if !ok {
+		return "", false, 0, 0
+	}
+
+	limit := order.ParentLimit
+	limit.DeleteOrder(order)
+	if limit.HeadOrder == nil {
+		ob.clearLimit(limit, order.GetIsBid())
+		if limit == ob.HighestBuy {
+			ob.HighestBuy = findLeftMost(ob.BuyTree)
+		} else if limit == ob.LowestSell {
+			ob.LowestSell = findLeftMost(ob.SellTree)
+		}
+	}
+	// TODO: remove order from map
+	delete(ob.idToOrderMap, order.GetId())
+
+	return order.GetUserId(), order.GetIsBid(), order.GetLimitPrice(), order.Size
 }
