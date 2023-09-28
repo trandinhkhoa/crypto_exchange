@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/trandinhkhoa/crypto-exchange/domain"
@@ -9,9 +10,9 @@ import (
 type Trade struct {
 	buyer     *domain.Order
 	seller    *domain.Order
-	price     float64
-	size      float64
-	timestamp int64
+	Price     float64
+	Size      float64
+	Timestamp int64
 }
 
 // TODO: dont return order as it contains pointer,
@@ -26,15 +27,15 @@ func (t Trade) GetSeller() domain.Order {
 }
 
 func (t Trade) GetPrice() float64 {
-	return t.price
+	return t.Price
 }
 
 func (t Trade) GetSize() float64 {
-	return t.size
+	return t.Size
 }
 
 func (t Trade) GetTimeStamp() int64 {
-	return t.timestamp
+	return t.Timestamp
 }
 
 func NewTrade(
@@ -46,9 +47,9 @@ func NewTrade(
 	return &Trade{
 		buyer:     buyer,
 		seller:    seller,
-		price:     price,
-		size:      size,
-		timestamp: time.Now().UnixNano(),
+		Price:     price,
+		Size:      size,
+		Timestamp: time.Now().UnixNano(),
 	}
 }
 
@@ -56,12 +57,13 @@ type Orderbook struct {
 	// TODO: limitation: this way the "interface" of Orderbook is tied to its implementation
 	// e.g. switch from BST to heap will be costly
 	// domain.Limit has the same issue
-	BuyTree      *domain.Limit
-	SellTree     *domain.Limit
-	LowestSell   *domain.Limit
-	HighestBuy   *domain.Limit
-	lastTrades   []Trade
-	idToOrderMap map[int64]*domain.Order
+	BuyTree         *domain.Limit
+	SellTree        *domain.Limit
+	LowestSell      *domain.Limit
+	HighestBuy      *domain.Limit
+	lastTrades      []Trade
+	idToOrderMap    map[int64]*domain.Order
+	LastTradedPrice float64
 }
 
 // TODO: hide all the pointers, make sure if &Orderbook{} is used it would be useless
@@ -191,6 +193,12 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder domain.Order) []Trade {
 
 	for incomingOrder.Size > 0 {
 		existingOrder := bestLimit.HeadOrder
+		if existingOrder == nil {
+			fmt.Println("HELLO  existingOrder == nil")
+		}
+		if bestLimit == nil {
+			fmt.Println("HELLO  bestLimit == nil")
+		}
 		if existingOrder.Size < incomingOrder.Size {
 			smallerOrder = existingOrder
 			biggerOrder = &incomingOrder
@@ -225,7 +233,9 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder domain.Order) []Trade {
 		bestLimit.TotalVolume -= sizeFilled
 
 		// if current limit is out of liquidity, remove it and move on to next limit
-		if bestLimit.TotalVolume == 0 {
+		// this check for empty limit, YIKES
+		// if bestLimit.TotalVolume == 0 {
+		if bestLimit.HeadOrder == nil {
 			if bestLimit.Parent == nil && bestLimit.RightChild == nil {
 				bestLimit = nil
 				makerTree = nil
@@ -263,6 +273,7 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder domain.Order) []Trade {
 		ob.HighestBuy = bestLimit
 	}
 	ob.lastTrades = append(ob.lastTrades, tradesArray...)
+	ob.LastTradedPrice = tradesArray[len(tradesArray)-1].GetPrice()
 	return tradesArray
 }
 
@@ -374,4 +385,24 @@ func (ob *Orderbook) CancelOrder(orderId int64) (string, bool, float64, float64)
 	delete(ob.idToOrderMap, order.GetId())
 
 	return order.GetUserId(), order.GetIsBid(), order.GetLimitPrice(), order.Size
+}
+
+func (ob *Orderbook) dfTraversal(node *domain.Limit, k int, arr *[]*domain.Limit) {
+	if node == nil {
+		return
+	}
+	ob.dfTraversal(node.LeftChild, k, arr)
+	if len(*arr) < k {
+		*arr = append(*arr, node)
+	}
+	if len(*arr) >= k {
+		return
+	}
+	ob.dfTraversal(node.RightChild, k, arr)
+}
+
+func (ob *Orderbook) GetBestLimits(tree *domain.Limit, k int) []*domain.Limit {
+	array := make([]*domain.Limit, 0)
+	ob.dfTraversal(tree, k, &array)
+	return array
 }

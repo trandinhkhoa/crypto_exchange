@@ -1,12 +1,16 @@
 # Implementation of a Crypto Exchange
 - For learning Go + trading engine
 - Orders matched uing Price-Time Priority
-- Users' balance management
+- Execution here is just users' balance management
 - Simple market making
 - REST API + WebSocket API provided
-- TODO: illustration
 - TODO: actual documentations, below are just my memos
 - TODO: Domain and uses cases entities persistence + load order book from storage ?
+- TODO: there are things I do are not thread-safe
+- TODO: better separations between layers following the clean architecture from (domain, usecases, inteface, infra)
+- TODO: better decoupling between implementations and interfaces
+- TODO: handle Floating Point Precision
+- TODO: buy/sell button for front end
 
 # Test
 ```
@@ -14,10 +18,11 @@ make build
 make test
 ```
 
-# Go
-```
-go mod init github.com/trandinhkhoa/crypto-exchange
-```
+
+# Demo
+Front-end written here
+https://github.com/trandinhkhoa?tab=repositories
+![](readmeImages/demo.gif)
 
 # Match
 ![](readmeImages/generic.png)
@@ -77,6 +82,7 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
     - choose debug: "create launch.json" -> "Attach to Process:
     - click on debug -> search for process name (not necessarily the process id) .e.g "exchange"
 - Go :
+    - `go mod init github.com/trandinhkhoa/crypto-exchange`
     - FAQ: Should I check go.sum into git?
         - https://twitter.com/FiloSottile/status/1029404663358087173
         - Generally yes. With it, anyone with your sources doesn't have to trust other GitHub repositories and custom import path owners. Something better is coming, but in the meantime it's the same model as hashes in lock files.
@@ -114,8 +120,7 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
     - "make" liquidity by providing orders for others to trade against.
 
 - misc.:
-    - bad code architecture -> I find it hard to write tests
-        - I should be able to test Limit without initializing Orderbook, users
+    - if it is hard to write tests, probably architecture was poorly designed
     - https://stackoverflow.com/questions/1222392/what-is-domain-driven-design-ddd/1222488#1222488
         - Rob Knight's answer
     - composition over inheritance ???
@@ -126,7 +131,3 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
     - https://blog.cleancoder.com/
     - https://manuel.kiessling.net/2012/09/28/applying-the-clean-architecture-to-go-applications/
     - https://web.archive.org/web/20110219163448/http://howtohft.wordpress.com/2011/02/15/how-to-build-a-fast-limit-order-book/
-- current bugs:
-    - fixed: users place sell market order, matched got usd back, but eth not deducted
-    - place limit order high (sell), try to clear out buys to push the price, to see if the limit order is eventually filled
-        - multiple 10000 price matched -> because for a moement bestAsk is 10000, market making logic then keep hanging around this value

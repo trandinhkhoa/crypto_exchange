@@ -1,6 +1,9 @@
 package usecases
 
 import (
+	"fmt"
+	"sync"
+
 	"github.com/trandinhkhoa/crypto-exchange/domain"
 )
 
@@ -13,6 +16,7 @@ const (
 type Exchange struct {
 	usersMap      map[string]*domain.User
 	orderbooksMap map[Ticker]*Orderbook
+	mu            sync.Mutex
 }
 
 func NewExchange() *Exchange {
@@ -43,6 +47,20 @@ func (ex Exchange) GetLastTrades(ticker string, k int) []Trade {
 	return ex.orderbooksMap[Ticker(ticker)].lastTrades[length-k:]
 }
 
+func (ex Exchange) GetBestBuys(ticker string, k int) []*domain.Limit {
+	book := ex.orderbooksMap[Ticker(ticker)]
+	return book.GetBestLimits(book.BuyTree, k)
+}
+
+func (ex Exchange) GetBestSells(ticker string, k int) []*domain.Limit {
+	book := ex.orderbooksMap[Ticker(ticker)]
+	return book.GetBestLimits(book.SellTree, k)
+}
+
+func (ex Exchange) GetLastPrice(ticker string) float64 {
+	return ex.orderbooksMap[Ticker(ticker)].LastTradedPrice
+}
+
 func (ex *Exchange) PlaceLimitOrder(o domain.Order) {
 	ticker := Ticker(o.GetTicker())
 	userId := o.GetUserId()
@@ -53,6 +71,8 @@ func (ex *Exchange) PlaceLimitOrder(o domain.Order) {
 
 	// block user balance
 	// TODO: check user's balance
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
 	if o.GetIsBid() {
 		user.Balance[ticker2] -= o.Size * o.GetLimitPrice()
 	} else {
@@ -68,6 +88,8 @@ func (ex *Exchange) PlaceMarketOrder(o domain.Order) []Trade {
 	ticker1 := string(ticker[:3])
 	ticker2 := string(ticker[3:])
 
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
 	// match
 	// TODO: PlaceMarketOrder() should not modify the orderbook.
 	// Market Buyer/Seller might not have sufficient balance and there is no way to check it before calling PlaceMarketOrder
@@ -77,15 +99,18 @@ func (ex *Exchange) PlaceMarketOrder(o domain.Order) []Trade {
 		buyer := ex.usersMap[trade.buyer.GetUserId()]
 		seller := ex.usersMap[trade.seller.GetUserId()]
 
-		buyer.Balance[ticker1] += trade.size
+		buyer.Balance[ticker1] += trade.Size
 		if trade.buyer.GetOrderType() == domain.MarketOrderType {
-			buyer.Balance[ticker2] -= trade.size * trade.price
+			buyer.Balance[ticker2] -= trade.Size * trade.Price
 		}
 
 		if trade.seller.GetOrderType() == domain.MarketOrderType {
-			seller.Balance[ticker1] -= trade.size
+			seller.Balance[ticker1] -= trade.Size
 		}
-		seller.Balance[ticker2] += trade.size * trade.price
+		// TODO: john's limit order might be filled (here) at the same time as he is placing a new limit order
+		// -> concurrent write
+		seller.Balance[ticker2] += trade.Size * trade.Price
+		fmt.Println(trade)
 	}
 	return tradesArray
 }

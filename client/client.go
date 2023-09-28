@@ -2,10 +2,15 @@ package client
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/trandinhkhoa/crypto-exchange/server"
@@ -15,10 +20,10 @@ const exchangeDomain = "http://localhost:3000"
 
 type PlaceLimitOrderResponseBody struct {
 	Msg   string
-	Order server.OrderData
+	Order server.OrderResponse
 }
 type PlaceMarketOrderResponseBody struct {
-	Matches []server.TradeData
+	Matches []server.TradeResponse
 }
 
 type CurrentPriceResponseBody struct {
@@ -67,8 +72,53 @@ func simulateFetchPriceFromOtherExchange() float64 {
 	return 1000
 }
 
+type PlaceOrderRequest struct {
+	UserId    string  `json:"UserId"`
+	OrderType string  `json:"OrderType"`
+	IsBid     bool    `json:"IsBid"`
+	Size      float64 `json:"Size"`
+	Price     float64 `json:"Price"`
+	Ticker    string  `json:"Ticker"`
+}
+
+func PlaceLimitFromFile() {
+	file, err := os.Open("Coinbase_BTCUSD_ob_10_2017_09_05.csv")
+	if err != nil {
+		log.Fatalf("Could not open the csv file: %s", err)
+	}
+
+	r := csv.NewReader(file)
+
+	// Read each record from csv
+	for {
+		record, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatalf("Could not read the csv file: %s", err)
+		}
+
+		price, _ := strconv.ParseFloat(record[2], 64)
+		size, _ := strconv.ParseFloat(record[3], 64)
+		isBid := record[1] == "a"
+
+		order := server.PlaceOrderRequest{
+			UserId:    "maker123",
+			OrderType: "LIMIT",
+			IsBid:     isBid,
+			Size:      size,
+			Price:     price,
+			Ticker:    "ETHUSD",
+		}
+
+		PlaceOrder(order)
+		time.Sleep(1 * time.Millisecond)
+	}
+}
+
 func MakeMarket() {
-	ticker := time.NewTicker(1000 * time.Millisecond)
+	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
 		bestAskPrice, _ := GetBestAskPrice()
 		if bestAskPrice == 0 {
@@ -129,7 +179,7 @@ func PlaceOrder(order server.PlaceOrderRequest) error {
 		fmt.Println("OH NO")
 		return err
 	}
-	fmt.Println(decodedResp)
+	// fmt.Println(order.OrderType, decodedResp)
 
 	return nil
 }
@@ -137,7 +187,7 @@ func PlaceOrder(order server.PlaceOrderRequest) error {
 func PlaceMarketRepeat() {
 	timer := time.NewTimer(1500 * time.Millisecond)
 	<-timer.C
-	ticker := time.NewTicker(1500 * time.Millisecond)
+	ticker := time.NewTicker(75 * time.Millisecond)
 	for {
 		isBid := true
 		if int(rand.Intn(9)) < 5 {

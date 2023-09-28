@@ -484,3 +484,78 @@ func TestCancelOrderBigTree(t *testing.T) {
 		}
 	}
 }
+
+func TestGetKBestBuys(t *testing.T) {
+	ob := usecases.NewOrderbook()
+
+	// Root: 7
+	// L--- 3 (x2)
+	//     L--- 1
+	//         R--- 2
+	//     R--- 5
+	//         L--- 4
+	//         R--- 6
+	// R--- 11
+	//     L--- 9
+	//         L--- 8
+	//         R--- 10
+	//     R--- 13
+	//         L--- 12
+	//         R--- 14
+
+	// Adding orders with limit prices from 1 to 14 (from the BST)
+	johnOrder := domain.NewOrder("john", "ticker", false, domain.LimitOrderType, 1, 7)
+	ob.PlaceLimitOrder(*johnOrder)
+
+	jimOrder := domain.NewOrder("jim", "ticker", false, domain.LimitOrderType, 1, 3)
+	ob.PlaceLimitOrder(*jimOrder)
+
+	janeOrder := domain.NewOrder("jane", "ticker", false, domain.LimitOrderType, 4, 11)
+	ob.PlaceLimitOrder(*janeOrder)
+
+	junOrder := domain.NewOrder("jun", "ticker", false, domain.LimitOrderType, 9, 9)
+	ob.PlaceLimitOrder(*junOrder)
+
+	jackOrder := domain.NewOrder("jack", "ticker", false, domain.LimitOrderType, 9, 9)
+	ob.PlaceLimitOrder(*jackOrder)
+
+	jerryOrder := domain.NewOrder("jerry", "ticker", false, domain.LimitOrderType, 2, 1)
+	ob.PlaceLimitOrder(*jerryOrder)
+
+	jessicaOrder := domain.NewOrder("jessica", "ticker", false, domain.LimitOrderType, 2, 2)
+	ob.PlaceLimitOrder(*jessicaOrder)
+
+	jillOrder := domain.NewOrder("jill", "ticker", false, domain.LimitOrderType, 3, 4)
+	ob.PlaceLimitOrder(*jillOrder)
+
+	jeffOrder := domain.NewOrder("jeff", "ticker", false, domain.LimitOrderType, 3, 5)
+	ob.PlaceLimitOrder(*jeffOrder)
+
+	jacobOrder := domain.NewOrder("jacob", "ticker", false, domain.LimitOrderType, 4, 6)
+	ob.PlaceLimitOrder(*jacobOrder)
+
+	julieOrder := domain.NewOrder("julie", "ticker", false, domain.LimitOrderType, 4, 8)
+	ob.PlaceLimitOrder(*julieOrder)
+
+	jamesOrder := domain.NewOrder("james", "ticker", false, domain.LimitOrderType, 5, 10)
+	ob.PlaceLimitOrder(*jamesOrder)
+
+	joanOrder := domain.NewOrder("joan", "ticker", false, domain.LimitOrderType, 5, 12)
+	ob.PlaceLimitOrder(*joanOrder)
+
+	jamieOrder := domain.NewOrder("jamie", "ticker", false, domain.LimitOrderType, 6, 13)
+	ob.PlaceLimitOrder(*jamieOrder)
+
+	jodieOrder := domain.NewOrder("jodie", "ticker", false, domain.LimitOrderType, 6, 14)
+	ob.PlaceLimitOrder(*jodieOrder)
+
+	assert.Equal(t, 64.0, ob.GetTotalVolumeAllSells())
+
+	assert.Equal(t, 1.0, ob.LowestSell.GetLimitPrice())
+
+	arr := ob.GetBestLimits(ob.SellTree, 3)
+	assert.Equal(t, 3, len(arr))
+	assert.Equal(t, 1.0, arr[0].GetLimitPrice())
+	assert.Equal(t, 2.0, arr[1].GetLimitPrice())
+	assert.Equal(t, 3.0, arr[2].GetLimitPrice())
+}

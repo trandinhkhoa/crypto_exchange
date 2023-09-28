@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -15,15 +16,15 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-type OrderBookData struct {
+type OrderBookResponse struct {
 	TotalAsksVolume float64
 	TotalBidsVolume float64
-	Asks            []*OrderData
-	Bids            []*OrderData
+	Asks            []*OrderResponse
+	Bids            []*OrderResponse
 }
 
 // TODO: perhaps user'id should not come from the body
-type OrderData struct {
+type OrderResponse struct {
 	ID        int
 	UserId    string
 	IsBid     bool
@@ -32,10 +33,14 @@ type OrderData struct {
 	Timestamp int64
 }
 
-type TradeData struct {
+type TradeResponse struct {
 	Price     float64
 	Size      float64
 	Timestamp int64
+}
+type LimitResponse struct {
+	Price  float64
+	Volume float64
 }
 
 // fields need to be visible to outer packages since this struct will be used by package json
@@ -82,9 +87,9 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 
 	if placeOrderData.OrderType == domain.MarketOrderType {
 		trades := handler.ex.PlaceMarketOrder(*incomingOrder)
-		tradesDataArray := make([]TradeData, 0)
+		tradesDataArray := make([]TradeResponse, 0)
 		for _, trade := range trades {
-			tradeData := &TradeData{
+			tradeData := &TradeResponse{
 				Timestamp: trade.GetTimeStamp(),
 				Price:     trade.GetPrice(),
 				Size:      trade.GetSize(),
@@ -96,7 +101,7 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 		handler.ex.PlaceLimitOrder(*incomingOrder)
 		return c.JSON(200, map[string]interface{}{
 			"msg": "limit order placed",
-			"order": OrderData{
+			"order": OrderResponse{
 				ID:        int(incomingOrder.GetId()),
 				UserId:    incomingOrder.GetUserId(),
 				IsBid:     incomingOrder.GetIsBid(),
@@ -112,11 +117,11 @@ func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
 	// TODO: "ticker" -> "ticker"
 	// TODO: should not need to convert to usescase.TIcker
 	ticker := usecases.Ticker(c.Param("ticker"))
-	orderBookData := OrderBookData{
+	orderBookData := OrderBookResponse{
 		TotalAsksVolume: 0.0,
 		TotalBidsVolume: 0.0,
-		Asks:            make([]*OrderData, 0),
-		Bids:            make([]*OrderData, 0),
+		Asks:            make([]*OrderResponse, 0),
+		Bids:            make([]*OrderResponse, 0),
 	}
 
 	buybook, bVolume, sellbook, sVolume := handler.ex.GetBook(string(ticker))
@@ -125,7 +130,7 @@ func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
 	for _, limit := range buybook {
 		order := limit.HeadOrder
 		for order != nil {
-			orderData := &OrderData{
+			orderData := &OrderResponse{
 				ID:        int(order.GetId()),
 				IsBid:     order.GetIsBid(),
 				Size:      order.Size,
@@ -139,7 +144,7 @@ func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
 	for _, limit := range sellbook {
 		order := limit.HeadOrder
 		for order != nil {
-			orderData := &OrderData{
+			orderData := &OrderResponse{
 				ID:        int(order.GetId()),
 				IsBid:     order.GetIsBid(),
 				Size:      order.Size,
@@ -235,23 +240,21 @@ func PanicRecoveryMiddleware() echo.MiddlewareFunc {
 }
 
 // this function is called everytime a client connect to the websocket
-func (handler WebServiceHandler) WebSocketHandler(ws *websocket.Conn) {
+func (handler WebServiceHandler) WebSocketHandlerCurrentPrice(ws *websocket.Conn) {
 	// TODO: let client choose ticker
 	ticker := "ETHUSD"
-	lastTrades := handler.ex.GetLastTrades(ticker, 1)
-	lastCurrentPrice := lastTrades[0].GetPrice()
-	fmt.Println("Hi I am WebSocketHandler")
+	lastCurrentPrice := 0.0
+	currentPrice := lastCurrentPrice
 
 	for {
-		lastTrades = handler.ex.GetLastTrades(ticker, 1)
-		currentPrice := lastTrades[0].GetPrice()
-		if currentPrice == 0 {
-			fmt.Println("YOYOYO", lastTrades)
-		}
+		// reading a field (float64) instead of slice as a dirty work around for the issue described below
+		// still racy but float64 will hide the issue
+		// with a slice, it's more obvious. because i might be reading a newly allocated entry that has not been filled yet
+		// TODO: use channel
+		currentPrice = handler.ex.GetLastPrice(ticker)
 		if currentPrice != lastCurrentPrice {
 			lastCurrentPrice = currentPrice
 			msg := fmt.Sprint(currentPrice)
-			// Send the received message back to the client
 
 			if err := websocket.Message.Send(ws, msg); err != nil {
 				fmt.Println("Can't send:", err)
@@ -261,8 +264,80 @@ func (handler WebServiceHandler) WebSocketHandler(ws *websocket.Conn) {
 					"msg": msg,
 				}).Info("Sent to client")
 			}
-			// time.Sleep(1 * time.Second)
 		}
+		// TODO: w/o sleep -> currentPrice == 0/weird value. The book might be queried too fast and even when it is empty ???
+		// when this happen , the orderbook is not empty, lastTrades is not empty either, lastTrades when debugged even show the correct value
+		// w/o low sleep time (100 ns) the issue is also more prevalent if i increase the number of socket listeners (1 listener ok, 3 listener not ok)
+		// another dirty "workaround" , faster market maker ?? -> No --> the issue only happen when this function is called
+		// even after creating a function that return  float64as the last price did not help
+		// this function is being ran concurrently (each HTTP request has its own goroutine )
+		//, it might trigger read access to trades[] at the same time trades is being written into , hence the weird value
+		// time.Sleep(100 * time.Nanosecond)
+	}
+}
+
+func (handler WebServiceHandler) WebSocketHandlerLastTrade(ws *websocket.Conn) {
+	ticker := "ETHUSD"
+
+	for {
+		tradesArray := handler.ex.GetLastTrades(ticker, 15)
+		arrayJSON, _ := json.Marshal(tradesArray)
+		// msg := fmt.Sprint(arrayJSON)
+		// fmt.Println("LAST TRADED ", string(arrayJSON))
+
+		if err := websocket.Message.Send(ws, string(arrayJSON)); err != nil {
+			fmt.Println("Can't send:", err)
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func (handler WebServiceHandler) WebSocketHandlerBestBuys(ws *websocket.Conn) {
+	ticker := "ETHUSD"
+
+	for {
+		arr := handler.ex.GetBestBuys(ticker, 15)
+		responsesArr := make([]LimitResponse, 0)
+		for _, limit := range arr {
+			response := LimitResponse{
+				Price:  limit.GetLimitPrice(),
+				Volume: limit.TotalVolume,
+			}
+			responsesArr = append(responsesArr, response)
+		}
+
+		arrayJSON, _ := json.Marshal(responsesArr)
+
+		if err := websocket.Message.Send(ws, string(arrayJSON)); err != nil {
+			fmt.Println("Can't send:", err)
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func (handler WebServiceHandler) WebSocketHandlerBestSells(ws *websocket.Conn) {
+	ticker := "ETHUSD"
+
+	for {
+		arr := handler.ex.GetBestSells(ticker, 15)
+		responsesArr := make([]LimitResponse, 0)
+		for _, limit := range arr {
+			response := LimitResponse{
+				Price:  limit.GetLimitPrice(),
+				Volume: limit.TotalVolume,
+			}
+			responsesArr = append(responsesArr, response)
+		}
+
+		arrayJSON, _ := json.Marshal(responsesArr)
+
+		if err := websocket.Message.Send(ws, string(arrayJSON)); err != nil {
+			fmt.Println("Can't send:", err)
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 
@@ -336,7 +411,10 @@ func StartServer() {
 
 	e.DELETE("/order/:ticker/:id", handler.HandleCancelOrder)
 
-	e.GET("/ws/currentPrice", echo.WrapHandler(websocket.Handler(handler.WebSocketHandler)))
+	e.GET("/ws/currentPrice", echo.WrapHandler(websocket.Handler(handler.WebSocketHandlerCurrentPrice)))
+	e.GET("/ws/lastTrades", echo.WrapHandler(websocket.Handler(handler.WebSocketHandlerLastTrade)))
+	e.GET("/ws/bestSells", echo.WrapHandler(websocket.Handler(handler.WebSocketHandlerBestSells)))
+	e.GET("/ws/bestBuys", echo.WrapHandler(websocket.Handler(handler.WebSocketHandlerBestBuys)))
 
 	e.Start(":3000")
 }
