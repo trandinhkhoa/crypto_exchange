@@ -1,28 +1,27 @@
-package usecases
+package domain
 
 import (
 	"fmt"
 	"time"
-
-	"github.com/trandinhkhoa/crypto-exchange/domain"
 )
 
 type Trade struct {
-	buyer     *domain.Order
-	seller    *domain.Order
-	Price     float64
-	Size      float64
-	Timestamp int64
+	buyer        *Order
+	seller       *Order
+	Price        float64
+	Size         float64
+	isBuyerMaker bool
+	Timestamp    int64
 }
 
 // TODO: dont return order as it contains pointer,
 // as w/ the pointer, the content of h field can be modified
 // defeat the point of encapsulation
-func (t Trade) GetBuyer() domain.Order {
+func (t Trade) GetBuyer() Order {
 	return *t.buyer
 }
 
-func (t Trade) GetSeller() domain.Order {
+func (t Trade) GetSeller() Order {
 	return *t.seller
 }
 
@@ -34,22 +33,28 @@ func (t Trade) GetSize() float64 {
 	return t.Size
 }
 
+func (t Trade) GetIsBuyerMaker() bool {
+	return t.isBuyerMaker
+}
+
 func (t Trade) GetTimeStamp() int64 {
 	return t.Timestamp
 }
 
 func NewTrade(
-	buyer *domain.Order,
-	seller *domain.Order,
+	buyer *Order,
+	seller *Order,
 	price float64,
 	size float64,
+	isBuyerMaker bool,
 ) *Trade {
 	return &Trade{
-		buyer:     buyer,
-		seller:    seller,
-		Price:     price,
-		Size:      size,
-		Timestamp: time.Now().UnixNano(),
+		buyer:        buyer,
+		seller:       seller,
+		Price:        price,
+		Size:         size,
+		isBuyerMaker: isBuyerMaker,
+		Timestamp:    time.Now().UnixNano(),
 	}
 }
 
@@ -57,24 +62,24 @@ type Orderbook struct {
 	// TODO: limitation: this way the "interface" of Orderbook is tied to its implementation
 	// e.g. switch from BST to heap will be costly
 	// domain.Limit has the same issue
-	BuyTree         *domain.Limit
-	SellTree        *domain.Limit
-	LowestSell      *domain.Limit
-	HighestBuy      *domain.Limit
+	BuyTree         *Limit
+	SellTree        *Limit
+	LowestSell      *Limit
+	HighestBuy      *Limit
 	lastTrades      []Trade
-	idToOrderMap    map[int64]*domain.Order
+	idToOrderMap    map[int64]*Order
 	LastTradedPrice float64
 }
 
 // TODO: hide all the pointers, make sure if &Orderbook{} is used it would be useless
 func NewOrderbook() *Orderbook {
 	return &Orderbook{
-		idToOrderMap: make(map[int64]*domain.Order),
+		idToOrderMap: make(map[int64]*Order),
 	}
 }
 
-func setupNewLimit(incomingOrder *domain.Order) *domain.Limit {
-	newLimit := domain.NewLimit(incomingOrder.GetLimitPrice())
+func setupNewLimit(incomingOrder *Order) *Limit {
+	newLimit := NewLimit(incomingOrder.GetLimitPrice())
 	newLimit.Parent = nil
 	newLimit.LeftChild = nil
 	newLimit.RightChild = nil
@@ -82,7 +87,7 @@ func setupNewLimit(incomingOrder *domain.Order) *domain.Limit {
 	return newLimit
 }
 
-func treeToArrayHelper(node *domain.Limit, array *[]*domain.Limit) {
+func treeToArrayHelper(node *Limit, array *[]*Limit) {
 	if node == nil {
 		return
 	}
@@ -100,13 +105,13 @@ func treeToArrayHelper(node *domain.Limit, array *[]*domain.Limit) {
 }
 
 // TODO: dont expose the pointer
-func TreeToArray(node *domain.Limit) []*domain.Limit {
-	array := make([]*domain.Limit, 0)
+func TreeToArray(node *Limit) []*Limit {
+	array := make([]*Limit, 0)
 	treeToArrayHelper(node, &array)
 	return array
 }
 
-func travelLimitTreeAndAddOrderToLimit(node *domain.Limit, incomingOrder *domain.Order) *domain.Limit {
+func travelLimitTreeAndAddOrderToLimit(node *Limit, incomingOrder *Order) *Limit {
 	if incomingOrder.GetLimitPrice() == node.HeadOrder.GetLimitPrice() {
 		node.AddOrder(incomingOrder)
 		return nil
@@ -131,7 +136,7 @@ func travelLimitTreeAndAddOrderToLimit(node *domain.Limit, incomingOrder *domain
 	}
 }
 
-func (ob *Orderbook) PlaceLimitOrder(incomingOrder domain.Order) {
+func (ob *Orderbook) PlaceLimitOrder(incomingOrder Order) {
 	// check if price level is in buyTree/sellTree
 	if incomingOrder.GetIsBid() {
 		if ob.BuyTree == nil {
@@ -161,7 +166,7 @@ func (ob *Orderbook) PlaceLimitOrder(incomingOrder domain.Order) {
 	ob.idToOrderMap[incomingOrder.GetId()] = &incomingOrder
 }
 
-func findLeftMost(node *domain.Limit) *domain.Limit {
+func findLeftMost(node *Limit) *Limit {
 	if node != nil && node.LeftChild != nil {
 		return findLeftMost(node.LeftChild)
 	} else {
@@ -169,7 +174,7 @@ func findLeftMost(node *domain.Limit) *domain.Limit {
 	}
 }
 
-func (ob *Orderbook) PlaceMarketOrder(incomingOrder domain.Order) []Trade {
+func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) []Trade {
 	// TODO: check volume somewhere else ? dont use panic ?
 	if (incomingOrder.GetIsBid() && ob.GetTotalVolumeAllSells() < incomingOrder.Size) || (!incomingOrder.GetIsBid() && ob.GetTotalVolumeAllBuys() < incomingOrder.Size) {
 		panic("Not enough volume")
@@ -177,11 +182,11 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder domain.Order) []Trade {
 	// check if price level is in buyTree/sellTree
 	tradesArray := make([]Trade, 0)
 
-	var smallerOrder *domain.Order
-	var biggerOrder *domain.Order
+	var smallerOrder *Order
+	var biggerOrder *Order
 
-	var makerTree *domain.Limit
-	var bestLimit *domain.Limit
+	var makerTree *Limit
+	var bestLimit *Limit
 
 	if incomingOrder.GetIsBid() {
 		makerTree = ob.SellTree
@@ -214,8 +219,8 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder domain.Order) []Trade {
 			bestLimit.DeleteOrder(existingOrder)
 		}
 
-		var buy *domain.Order
-		var sell *domain.Order
+		var buy *Order
+		var sell *Order
 		// update trades and ob volume
 		if incomingOrder.GetIsBid() {
 			buy = &incomingOrder
@@ -228,7 +233,8 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder domain.Order) []Trade {
 			buy,
 			sell,
 			existingOrder.GetLimitPrice(),
-			sizeFilled))
+			sizeFilled,
+			existingOrder.isBid))
 
 		bestLimit.TotalVolume -= sizeFilled
 
@@ -277,7 +283,7 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder domain.Order) []Trade {
 	return tradesArray
 }
 
-func sumTree(node *domain.Limit) float64 {
+func sumTree(node *Limit) float64 {
 	if node == nil {
 		return 0
 	}
@@ -303,7 +309,7 @@ func (ob *Orderbook) GetLastTrades() []Trade {
 	return ob.lastTrades
 }
 
-func (ob *Orderbook) clearLimit(limit *domain.Limit, isBid bool) {
+func (ob *Orderbook) clearLimit(limit *Limit, isBid bool) {
 
 	parent := limit.Parent
 	rightChild := limit.RightChild
@@ -387,7 +393,7 @@ func (ob *Orderbook) CancelOrder(orderId int64) (string, bool, float64, float64)
 	return order.GetUserId(), order.GetIsBid(), order.GetLimitPrice(), order.Size
 }
 
-func (ob *Orderbook) dfTraversal(node *domain.Limit, k int, arr *[]*domain.Limit) {
+func (ob *Orderbook) dfTraversal(node *Limit, k int, arr *[]*Limit) {
 	if node == nil {
 		return
 	}
@@ -401,8 +407,8 @@ func (ob *Orderbook) dfTraversal(node *domain.Limit, k int, arr *[]*domain.Limit
 	ob.dfTraversal(node.RightChild, k, arr)
 }
 
-func (ob *Orderbook) GetBestLimits(tree *domain.Limit, k int) []*domain.Limit {
-	array := make([]*domain.Limit, 0)
+func (ob *Orderbook) GetBestLimits(tree *Limit, k int) []*Limit {
+	array := make([]*Limit, 0)
 	ob.dfTraversal(tree, k, &array)
 	return array
 }

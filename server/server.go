@@ -34,9 +34,10 @@ type OrderResponse struct {
 }
 
 type TradeResponse struct {
-	Price     float64
-	Size      float64
-	Timestamp int64
+	Price        float64
+	Size         float64
+	IsBuyerMaker bool
+	Timestamp    int64
 }
 type LimitResponse struct {
 	Price  float64
@@ -90,9 +91,10 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 		tradesDataArray := make([]TradeResponse, 0)
 		for _, trade := range trades {
 			tradeData := &TradeResponse{
-				Timestamp: trade.GetTimeStamp(),
-				Price:     trade.GetPrice(),
-				Size:      trade.GetSize(),
+				Timestamp:    trade.GetTimeStamp(),
+				Price:        trade.GetPrice(),
+				Size:         trade.GetSize(),
+				IsBuyerMaker: trade.GetIsBuyerMaker(),
 			}
 			tradesDataArray = append(tradesDataArray, *tradeData)
 		}
@@ -280,10 +282,19 @@ func (handler WebServiceHandler) WebSocketHandlerLastTrade(ws *websocket.Conn) {
 	ticker := "ETHUSD"
 
 	for {
-		tradesArray := handler.ex.GetLastTrades(ticker, 15)
-		arrayJSON, _ := json.Marshal(tradesArray)
-		// msg := fmt.Sprint(arrayJSON)
-		// fmt.Println("LAST TRADED ", string(arrayJSON))
+		arr := handler.ex.GetLastTrades(ticker, 15)
+		responsesArr := make([]TradeResponse, 0)
+		for _, trade := range arr {
+			response := TradeResponse{
+				Price:        trade.GetPrice(),
+				Size:         trade.GetSize(),
+				IsBuyerMaker: trade.GetIsBuyerMaker(),
+				Timestamp:    trade.GetTimeStamp(),
+			}
+			responsesArr = append(responsesArr, response)
+		}
+
+		arrayJSON, _ := json.Marshal(responsesArr)
 
 		if err := websocket.Message.Send(ws, string(arrayJSON)); err != nil {
 			fmt.Println("Can't send:", err)

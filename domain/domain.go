@@ -95,7 +95,7 @@ func (o Order) GetTicker() string {
 func (o *Order) GetIsBid() bool {
 	return o.isBid
 }
-func (o *Order) GetOrderType() OrderType {
+func (o Order) GetOrderType() OrderType {
 	return o.orderType
 }
 func (o *Order) GetLimitPrice() float64 {

@@ -15,15 +15,15 @@ const (
 
 type Exchange struct {
 	usersMap      map[string]*domain.User
-	orderbooksMap map[Ticker]*Orderbook
+	orderbooksMap map[Ticker]*domain.Orderbook
 	mu            sync.Mutex
 }
 
 func NewExchange() *Exchange {
 	newExchange := &Exchange{}
 	newExchange.usersMap = make(map[string]*domain.User, 0)
-	ethusdOrderbook := NewOrderbook()
-	newExchange.orderbooksMap = map[Ticker]*Orderbook{}
+	ethusdOrderbook := domain.NewOrderbook()
+	newExchange.orderbooksMap = map[Ticker]*domain.Orderbook{}
 	newExchange.orderbooksMap[ETHUSD] = ethusdOrderbook
 
 	return newExchange
@@ -39,12 +39,12 @@ func (ex Exchange) GetUsersMap() map[string]domain.User {
 	return usersMap
 }
 
-func (ex Exchange) GetLastTrades(ticker string, k int) []Trade {
-	length := len(ex.orderbooksMap[Ticker(ticker)].lastTrades)
+func (ex Exchange) GetLastTrades(ticker string, k int) []domain.Trade {
+	length := len(ex.orderbooksMap[Ticker(ticker)].GetLastTrades())
 	if k > length {
-		return ex.orderbooksMap[Ticker(ticker)].lastTrades
+		return ex.orderbooksMap[Ticker(ticker)].GetLastTrades()
 	}
-	return ex.orderbooksMap[Ticker(ticker)].lastTrades[length-k:]
+	return ex.orderbooksMap[Ticker(ticker)].GetLastTrades()[length-k:]
 }
 
 func (ex Exchange) GetBestBuys(ticker string, k int) []*domain.Limit {
@@ -82,7 +82,7 @@ func (ex *Exchange) PlaceLimitOrder(o domain.Order) {
 	ex.orderbooksMap[ticker].PlaceLimitOrder(o)
 }
 
-func (ex *Exchange) PlaceMarketOrder(o domain.Order) []Trade {
+func (ex *Exchange) PlaceMarketOrder(o domain.Order) []domain.Trade {
 	// TODO: volume check
 	ticker := Ticker(o.GetTicker())
 	ticker1 := string(ticker[:3])
@@ -96,15 +96,15 @@ func (ex *Exchange) PlaceMarketOrder(o domain.Order) []Trade {
 	tradesArray := ex.orderbooksMap[ticker].PlaceMarketOrder(o)
 	//execute
 	for _, trade := range tradesArray {
-		buyer := ex.usersMap[trade.buyer.GetUserId()]
-		seller := ex.usersMap[trade.seller.GetUserId()]
+		buyer := ex.usersMap[trade.GetBuyer().GetUserId()]
+		seller := ex.usersMap[trade.GetSeller().GetUserId()]
 
 		buyer.Balance[ticker1] += trade.Size
-		if trade.buyer.GetOrderType() == domain.MarketOrderType {
+		if trade.GetBuyer().GetOrderType() == domain.MarketOrderType {
 			buyer.Balance[ticker2] -= trade.Size * trade.Price
 		}
 
-		if trade.seller.GetOrderType() == domain.MarketOrderType {
+		if trade.GetSeller().GetOrderType() == domain.MarketOrderType {
 			seller.Balance[ticker1] -= trade.Size
 		}
 		// TODO: john's limit order might be filled (here) at the same time as he is placing a new limit order
@@ -136,9 +136,9 @@ func (ex *Exchange) RegisterUserWithBalance(userId string, balance map[string]fl
 }
 
 func (ex *Exchange) GetBook(ticker string) ([]*domain.Limit, float64, []*domain.Limit, float64) {
-	buybook := TreeToArray(ex.orderbooksMap[Ticker(ticker)].BuyTree)
+	buybook := domain.TreeToArray(ex.orderbooksMap[Ticker(ticker)].BuyTree)
 	buyVolume := ex.orderbooksMap[Ticker(ticker)].GetTotalVolumeAllBuys()
-	sellbook := TreeToArray(ex.orderbooksMap[Ticker(ticker)].SellTree)
+	sellbook := domain.TreeToArray(ex.orderbooksMap[Ticker(ticker)].SellTree)
 	sellVolume := ex.orderbooksMap[Ticker(ticker)].GetTotalVolumeAllSells()
 	return buybook, buyVolume, sellbook, sellVolume
 }

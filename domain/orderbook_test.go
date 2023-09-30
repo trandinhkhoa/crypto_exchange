@@ -1,11 +1,10 @@
-package usecases_test
+package domain_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/trandinhkhoa/crypto-exchange/domain"
-	"github.com/trandinhkhoa/crypto-exchange/usecases"
 )
 
 func limitArrToJson(ll []*domain.Limit) string {
@@ -21,7 +20,7 @@ func limitArrToJson(ll []*domain.Limit) string {
 }
 
 func TestPlaceLimitOrder(t *testing.T) {
-	ob := usecases.NewOrderbook()
+	ob := domain.NewOrderbook()
 
 	// Root: 1000
 	// L--- 1005
@@ -95,7 +94,7 @@ func TestPlaceLimitOrder(t *testing.T) {
 	assert.Equal(t, ob.BuyTree.LeftChild.RightChild.HeadOrder.GetUserId(), "jun")
 	assert.Equal(t, ob.BuyTree.LeftChild.RightChild.TailOrder.GetUserId(), "jack")
 
-	arr := usecases.TreeToArray(ob.BuyTree)
+	arr := domain.TreeToArray(ob.BuyTree)
 	for index := 0; index < len(arr)-1; index++ {
 		if arr[index].GetLimitPrice() <= arr[index+1].GetLimitPrice() {
 			t.Errorf("Buy Limit not sorted in descending order ")
@@ -105,7 +104,7 @@ func TestPlaceLimitOrder(t *testing.T) {
 }
 
 func TestPlaceLimitOrderSell(t *testing.T) {
-	ob := usecases.NewOrderbook()
+	ob := domain.NewOrderbook()
 
 	// Root: 1000
 	// L--- 900
@@ -180,7 +179,7 @@ func TestPlaceLimitOrderSell(t *testing.T) {
 	assert.Equal(t, ob.SellTree.RightChild.LeftChild.HeadOrder.GetUserId(), "jun")
 	assert.Equal(t, ob.SellTree.RightChild.LeftChild.TailOrder.GetUserId(), "jack")
 
-	arr := usecases.TreeToArray(ob.SellTree)
+	arr := domain.TreeToArray(ob.SellTree)
 	for index := 0; index < len(arr)-1; index++ {
 		if arr[index].GetLimitPrice() >= arr[index+1].GetLimitPrice() {
 			t.Errorf("Sell Limit not sorted in ascending order ")
@@ -194,7 +193,7 @@ func TestPlaceMarketOrderBuyOneFill(t *testing.T) {
 	// L--- 900
 	// R--- 1005
 	//     R--- 1100
-	ob := usecases.NewOrderbook()
+	ob := domain.NewOrderbook()
 
 	incomingOrder := domain.NewOrder("john", "ticker", false, domain.LimitOrderType, 1, 1000)
 	ob.PlaceLimitOrder(*incomingOrder)
@@ -224,7 +223,7 @@ func TestPlaceMarketOrderBuyOneFill(t *testing.T) {
 }
 
 func TestPlaceMarketOrderBuyOnePartialFill(t *testing.T) {
-	ob := usecases.NewOrderbook()
+	ob := domain.NewOrderbook()
 
 	// Root: 1000
 	// L--- 900
@@ -258,7 +257,7 @@ func TestPlaceMarketOrderBuyOnePartialFill(t *testing.T) {
 }
 
 func TestPlaceMarketOrderBuyMultiFill(t *testing.T) {
-	ob := usecases.NewOrderbook()
+	ob := domain.NewOrderbook()
 
 	// Root: 1000
 	// L--- 900
@@ -316,7 +315,7 @@ func TestPlaceMarketOrderSellMultiFill(t *testing.T) {
 	// L--- 1005
 	//     L--- 1100
 	// R--- 900
-	ob := usecases.NewOrderbook()
+	ob := domain.NewOrderbook()
 
 	incomingOrder := domain.NewOrder("john", "ticker", true, domain.LimitOrderType, 1, 1000)
 	ob.PlaceLimitOrder(*incomingOrder)
@@ -365,7 +364,7 @@ func TestPlaceMarketOrderSellMultiFill(t *testing.T) {
 }
 
 func TestCancelOrderSimple(t *testing.T) {
-	ob := usecases.NewOrderbook()
+	ob := domain.NewOrderbook()
 
 	// Root: 1000
 
@@ -382,7 +381,7 @@ func TestCancelOrderSimple(t *testing.T) {
 }
 
 func TestCancelOrderBigTree(t *testing.T) {
-	ob := usecases.NewOrderbook()
+	ob := domain.NewOrderbook()
 
 	// Root: 7
 	// L--- 3 (x2)
@@ -476,7 +475,7 @@ func TestCancelOrderBigTree(t *testing.T) {
 	assert.Equal(t, 3.0, ob.LowestSell.GetLimitPrice())
 	assert.Equal(t, 45.0, ob.GetTotalVolumeAllSells())
 
-	arr := usecases.TreeToArray(ob.SellTree)
+	arr := domain.TreeToArray(ob.SellTree)
 	for index := 0; index < len(arr)-1; index++ {
 		if arr[index].GetLimitPrice() >= arr[index+1].GetLimitPrice() {
 			t.Errorf("Sell Limit not sorted in ascending order ")
@@ -486,7 +485,7 @@ func TestCancelOrderBigTree(t *testing.T) {
 }
 
 func TestGetKBestBuys(t *testing.T) {
-	ob := usecases.NewOrderbook()
+	ob := domain.NewOrderbook()
 
 	// Root: 7
 	// L--- 3 (x2)
