@@ -18,10 +18,18 @@ make build
 make test
 ```
 
+# Test
+- Run
+```
+make run
+```
+The server will run at port 3000.
+- Launch the frontend.
+https://github.com/trandinhkhoa/crypto_exchange_frontend
+    - The frontend (port 8080) is already configured to connect to port 3000.
 
 # Demo
-Front-end written here
-https://github.com/trandinhkhoa?tab=repositories
+Demo with the Front-end mentioned above
 ![](readmeImages/demo.gif)
 
 # Match

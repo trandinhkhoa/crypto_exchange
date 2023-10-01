@@ -92,7 +92,7 @@ func (o *Order) IsFilled() bool {
 	return o.Size == float64(0)
 }
 
-func (o *Order) GetId() int64 {
+func (o Order) GetId() int64 {
 	return o.id
 }
 
@@ -102,16 +102,16 @@ func (o Order) GetUserId() string {
 func (o Order) GetTicker() string {
 	return o.ticker
 }
-func (o *Order) GetIsBid() bool {
+func (o Order) GetIsBid() bool {
 	return o.isBid
 }
 func (o Order) GetOrderType() OrderType {
 	return o.orderType
 }
-func (o *Order) GetLimitPrice() float64 {
+func (o Order) GetLimitPrice() float64 {
 	return o.limitPrice
 }
-func (o *Order) GetTimeStamp() int64 {
+func (o Order) GetTimeStamp() int64 {
 	return o.timestamp
 }
 func (o Order) GetSize() float64 {
