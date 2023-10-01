@@ -5,9 +5,9 @@
 - Simple market making
 - REST API + WebSocket API provided
 - TODO: actual documentations, below are just my memos
-- TODO: Domain and uses cases entities persistence + load order book from storage ?
+- TODO: entities persistence + load order book from storage ?
 - TODO: there are things I do are not thread-safe
-- TODO: better separations between layers following the clean architecture from (domain, usecases, inteface, infra)
+- TODO: better separations between layers following the clean architecture from (entities, usecases, inteface, infra)
 - TODO: better decoupling between implementations and interfaces
 - TODO: handle Floating Point Precision
 - TODO: buy/sell button for front end
@@ -121,7 +121,7 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
 
 - misc.:
     - if it is hard to write tests, probably architecture was poorly designed
-    - https://stackoverflow.com/questions/1222392/what-is-domain-driven-design-ddd/1222488#1222488
+    - https://stackoverflow.com/questions/1222392/what-is-entities-driven-design-ddd/1222488#1222488
         - Rob Knight's answer
     - composition over inheritance ???
         - top answer: https://www.reddit.com/r/AskProgramming/comments/lv7m7a/i_still_dont_understand_the_prefer_composition/

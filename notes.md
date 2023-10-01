@@ -96,7 +96,7 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
 - misc.:
     - bad code architecture -> I find it hard to write tests
         - I should be able to test Limit without initializing Orderbook, users
-    - https://stackoverflow.com/questions/1222392/what-is-domain-driven-design-ddd/1222488#1222488
+    - https://stackoverflow.com/questions/1222392/what-is-entities-driven-design-ddd/1222488#1222488
         - Rob Knight's answer
     - composition over inheritance ???
         - top answer: https://www.reddit.com/r/AskProgramming/comments/lv7m7a/i_still_dont_understand_the_prefer_composition/

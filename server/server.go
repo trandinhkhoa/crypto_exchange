@@ -11,7 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/sirupsen/logrus"
-	"github.com/trandinhkhoa/crypto-exchange/domain"
+	"github.com/trandinhkhoa/crypto-exchange/entities"
 	"github.com/trandinhkhoa/crypto-exchange/usecases"
 	"golang.org/x/net/websocket"
 )
@@ -47,7 +47,7 @@ type LimitResponse struct {
 // fields need to be visible to outer packages since this struct will be used by package json
 type PlaceOrderRequest struct {
 	UserId    string
-	OrderType domain.OrderType // limit or ticker
+	OrderType entities.OrderType // limit or ticker
 	IsBid     bool
 	Size      float64
 	Price     float64
@@ -70,7 +70,7 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 	if err := json.NewDecoder(c.Request().Body).Decode(&placeOrderData); err != nil {
 		return err
 	}
-	incomingOrder := domain.NewOrder(
+	incomingOrder := entities.NewOrder(
 		placeOrderData.UserId,
 		placeOrderData.Ticker,
 		placeOrderData.IsBid,
@@ -86,7 +86,7 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 		return c.JSON(400, map[string]interface{}{"msg": msg})
 	}
 
-	if placeOrderData.OrderType == domain.MarketOrderType {
+	if placeOrderData.OrderType == entities.MarketOrderType {
 		trades := handler.ex.PlaceMarketOrder(*incomingOrder)
 		tradesDataArray := make([]TradeResponse, 0)
 		for _, trade := range trades {

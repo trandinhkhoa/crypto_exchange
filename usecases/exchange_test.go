@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/trandinhkhoa/crypto-exchange/domain"
+	"github.com/trandinhkhoa/crypto-exchange/entities"
 	"github.com/trandinhkhoa/crypto-exchange/usecases"
 )
 
@@ -43,26 +43,26 @@ func TestPlaceLimitOrderExchange(t *testing.T) {
 		})
 
 	// 1000(*)
-	incomingOrder := domain.NewOrder("john", "ETHUSD", false, domain.LimitOrderType, 1, 100)
+	incomingOrder := entities.NewOrder("john", "ETHUSD", false, entities.LimitOrderType, 1, 100)
 	ex.PlaceLimitOrder(*incomingOrder)
 
 	// 900 < 1000(*)
-	incomingOrder = domain.NewOrder("jim", "ETHUSD", false, domain.LimitOrderType, 1, 90)
+	incomingOrder = entities.NewOrder("jim", "ETHUSD", false, entities.LimitOrderType, 1, 90)
 	ex.PlaceLimitOrder(*incomingOrder)
 
 	// 900 < 1000(*) < 1100
-	incomingOrder = domain.NewOrder("jane", "ETHUSD", false, domain.LimitOrderType, 4, 110)
+	incomingOrder = entities.NewOrder("jane", "ETHUSD", false, entities.LimitOrderType, 4, 110)
 	ex.PlaceLimitOrder(*incomingOrder)
 
 	// 900 < 1000(*) < 1005 < 1100
-	incomingOrder = domain.NewOrder("jun", "ETHUSD", false, domain.LimitOrderType, 9, 105)
+	incomingOrder = entities.NewOrder("jun", "ETHUSD", false, entities.LimitOrderType, 9, 105)
 	ex.PlaceLimitOrder(*incomingOrder)
 
 	// 900 < 1000(*) < 1005[2] < 1100
-	incomingOrder = domain.NewOrder("jack", "ETHUSD", false, domain.LimitOrderType, 9, 105)
+	incomingOrder = entities.NewOrder("jack", "ETHUSD", false, entities.LimitOrderType, 9, 105)
 	ex.PlaceLimitOrder(*incomingOrder)
 
-	incomingOrder = domain.NewOrder("lily", "ETHUSD", true, domain.MarketOrderType, 1, 0)
+	incomingOrder = entities.NewOrder("lily", "ETHUSD", true, entities.MarketOrderType, 1, 0)
 	ex.PlaceMarketOrder(*incomingOrder)
 
 	assert.Equal(t, ex.GetUsersMap()["john"].Balance["ETH"], 1999.0)
@@ -123,26 +123,26 @@ func TestCancelOrderExchange(t *testing.T) {
 	// L--- 900
 	// R--- 1005
 	//     R--- 1100
-	johnOrder := domain.NewOrder("john", "ETHUSD", false, domain.LimitOrderType, 1, 100)
+	johnOrder := entities.NewOrder("john", "ETHUSD", false, entities.LimitOrderType, 1, 100)
 	ex.PlaceLimitOrder(*johnOrder)
 
-	jimOrder := domain.NewOrder("jim", "ETHUSD", false, domain.LimitOrderType, 1, 90)
+	jimOrder := entities.NewOrder("jim", "ETHUSD", false, entities.LimitOrderType, 1, 90)
 	ex.PlaceLimitOrder(*jimOrder)
 
-	janeOrder := domain.NewOrder("jane", "ETHUSD", false, domain.LimitOrderType, 4, 110)
+	janeOrder := entities.NewOrder("jane", "ETHUSD", false, entities.LimitOrderType, 4, 110)
 	ex.PlaceLimitOrder(*janeOrder)
 
-	junOrder := domain.NewOrder("jun", "ETHUSD", false, domain.LimitOrderType, 9, 105)
+	junOrder := entities.NewOrder("jun", "ETHUSD", false, entities.LimitOrderType, 9, 105)
 	ex.PlaceLimitOrder(*junOrder)
 
-	jackOrder := domain.NewOrder("jack", "ETHUSD", false, domain.LimitOrderType, 9, 105)
+	jackOrder := entities.NewOrder("jack", "ETHUSD", false, entities.LimitOrderType, 9, 105)
 	ex.PlaceLimitOrder(*jackOrder)
 
 	ex.CancelOrder(jimOrder.GetId(), "ETHUSD")
 	assert.Equal(t, 2000.0, ex.GetUsersMap()["jim"].Balance["ETH"])
 	assert.Equal(t, 2000.0, ex.GetUsersMap()["jim"].Balance["USD"])
 
-	lilyOrder := domain.NewOrder("lily", "ETHUSD", true, domain.MarketOrderType, 1, 0)
+	lilyOrder := entities.NewOrder("lily", "ETHUSD", true, entities.MarketOrderType, 1, 0)
 	ex.PlaceMarketOrder(*lilyOrder)
 
 	assert.Equal(t, 1996.0, ex.GetUsersMap()["jane"].Balance["ETH"])

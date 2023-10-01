@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/trandinhkhoa/crypto-exchange/domain"
+	"github.com/trandinhkhoa/crypto-exchange/entities"
 )
 
 type Ticker string
@@ -14,24 +14,24 @@ const (
 )
 
 type Exchange struct {
-	usersMap      map[string]*domain.User
-	orderbooksMap map[Ticker]*domain.Orderbook
+	usersMap      map[string]*entities.User
+	orderbooksMap map[Ticker]*entities.Orderbook
 	mu            sync.Mutex
 }
 
 func NewExchange() *Exchange {
 	newExchange := &Exchange{}
-	newExchange.usersMap = make(map[string]*domain.User, 0)
-	ethusdOrderbook := domain.NewOrderbook()
-	newExchange.orderbooksMap = map[Ticker]*domain.Orderbook{}
+	newExchange.usersMap = make(map[string]*entities.User, 0)
+	ethusdOrderbook := entities.NewOrderbook()
+	newExchange.orderbooksMap = map[Ticker]*entities.Orderbook{}
 	newExchange.orderbooksMap[ETHUSD] = ethusdOrderbook
 
 	return newExchange
 }
 
-func (ex Exchange) GetUsersMap() map[string]domain.User {
+func (ex Exchange) GetUsersMap() map[string]entities.User {
 	// return a copy, not a reference
-	usersMap := make(map[string]domain.User, 0)
+	usersMap := make(map[string]entities.User, 0)
 
 	for k, v := range ex.usersMap {
 		usersMap[k] = *v
@@ -39,7 +39,7 @@ func (ex Exchange) GetUsersMap() map[string]domain.User {
 	return usersMap
 }
 
-func (ex Exchange) GetLastTrades(ticker string, k int) []domain.Trade {
+func (ex Exchange) GetLastTrades(ticker string, k int) []entities.Trade {
 	length := len(ex.orderbooksMap[Ticker(ticker)].GetLastTrades())
 	if k > length {
 		return ex.orderbooksMap[Ticker(ticker)].GetLastTrades()
@@ -47,12 +47,12 @@ func (ex Exchange) GetLastTrades(ticker string, k int) []domain.Trade {
 	return ex.orderbooksMap[Ticker(ticker)].GetLastTrades()[length-k:]
 }
 
-func (ex Exchange) GetBestBuys(ticker string, k int) []*domain.Limit {
+func (ex Exchange) GetBestBuys(ticker string, k int) []*entities.Limit {
 	book := ex.orderbooksMap[Ticker(ticker)]
 	return book.GetBestLimits(book.BuyTree, k)
 }
 
-func (ex Exchange) GetBestSells(ticker string, k int) []*domain.Limit {
+func (ex Exchange) GetBestSells(ticker string, k int) []*entities.Limit {
 	book := ex.orderbooksMap[Ticker(ticker)]
 	return book.GetBestLimits(book.SellTree, k)
 }
@@ -61,7 +61,7 @@ func (ex Exchange) GetLastPrice(ticker string) float64 {
 	return ex.orderbooksMap[Ticker(ticker)].LastTradedPrice
 }
 
-func (ex *Exchange) PlaceLimitOrder(o domain.Order) {
+func (ex *Exchange) PlaceLimitOrder(o entities.Order) {
 	ticker := Ticker(o.GetTicker())
 	userId := o.GetUserId()
 	user := ex.usersMap[userId]
@@ -82,7 +82,7 @@ func (ex *Exchange) PlaceLimitOrder(o domain.Order) {
 	ex.orderbooksMap[ticker].PlaceLimitOrder(o)
 }
 
-func (ex *Exchange) PlaceMarketOrder(o domain.Order) []domain.Trade {
+func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
 	// TODO: volume check
 	ticker := Ticker(o.GetTicker())
 	ticker1 := string(ticker[:3])
@@ -100,11 +100,11 @@ func (ex *Exchange) PlaceMarketOrder(o domain.Order) []domain.Trade {
 		seller := ex.usersMap[trade.GetSeller().GetUserId()]
 
 		buyer.Balance[ticker1] += trade.Size
-		if trade.GetBuyer().GetOrderType() == domain.MarketOrderType {
+		if trade.GetBuyer().GetOrderType() == entities.MarketOrderType {
 			buyer.Balance[ticker2] -= trade.Size * trade.Price
 		}
 
-		if trade.GetSeller().GetOrderType() == domain.MarketOrderType {
+		if trade.GetSeller().GetOrderType() == entities.MarketOrderType {
 			seller.Balance[ticker1] -= trade.Size
 		}
 		// TODO: john's limit order might be filled (here) at the same time as he is placing a new limit order
@@ -117,7 +117,7 @@ func (ex *Exchange) PlaceMarketOrder(o domain.Order) []domain.Trade {
 
 func (ex *Exchange) RegisterUser(userId string) {
 	// TODO: should have an array of tickers, iterate it and set their balances to zeros
-	newUser := domain.User{
+	newUser := entities.User{
 		UserId:  userId,
 		Balance: make(map[string]float64),
 	}
@@ -128,17 +128,17 @@ func (ex *Exchange) RegisterUser(userId string) {
 
 func (ex *Exchange) RegisterUserWithBalance(userId string, balance map[string]float64) {
 	// TODO: should have an array of tickers, iterate it and set their balances to zeros
-	newUser := domain.User{
+	newUser := entities.User{
 		UserId:  userId,
 		Balance: balance,
 	}
 	ex.usersMap[userId] = &newUser
 }
 
-func (ex *Exchange) GetBook(ticker string) ([]*domain.Limit, float64, []*domain.Limit, float64) {
-	buybook := domain.TreeToArray(ex.orderbooksMap[Ticker(ticker)].BuyTree)
+func (ex *Exchange) GetBook(ticker string) ([]*entities.Limit, float64, []*entities.Limit, float64) {
+	buybook := entities.TreeToArray(ex.orderbooksMap[Ticker(ticker)].BuyTree)
 	buyVolume := ex.orderbooksMap[Ticker(ticker)].GetTotalVolumeAllBuys()
-	sellbook := domain.TreeToArray(ex.orderbooksMap[Ticker(ticker)].SellTree)
+	sellbook := entities.TreeToArray(ex.orderbooksMap[Ticker(ticker)].SellTree)
 	sellVolume := ex.orderbooksMap[Ticker(ticker)].GetTotalVolumeAllSells()
 	return buybook, buyVolume, sellbook, sellVolume
 }

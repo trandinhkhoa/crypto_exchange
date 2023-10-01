@@ -1,67 +1,13 @@
-package domain
+package entities
 
 import (
 	"fmt"
-	"time"
 )
-
-type Trade struct {
-	buyer        *Order
-	seller       *Order
-	Price        float64
-	Size         float64
-	isBuyerMaker bool
-	Timestamp    int64
-}
-
-// TODO: dont return order as it contains pointer,
-// as w/ the pointer, the content of h field can be modified
-// defeat the point of encapsulation
-func (t Trade) GetBuyer() Order {
-	return *t.buyer
-}
-
-func (t Trade) GetSeller() Order {
-	return *t.seller
-}
-
-func (t Trade) GetPrice() float64 {
-	return t.Price
-}
-
-func (t Trade) GetSize() float64 {
-	return t.Size
-}
-
-func (t Trade) GetIsBuyerMaker() bool {
-	return t.isBuyerMaker
-}
-
-func (t Trade) GetTimeStamp() int64 {
-	return t.Timestamp
-}
-
-func NewTrade(
-	buyer *Order,
-	seller *Order,
-	price float64,
-	size float64,
-	isBuyerMaker bool,
-) *Trade {
-	return &Trade{
-		buyer:        buyer,
-		seller:       seller,
-		Price:        price,
-		Size:         size,
-		isBuyerMaker: isBuyerMaker,
-		Timestamp:    time.Now().UnixNano(),
-	}
-}
 
 type Orderbook struct {
 	// TODO: limitation: this way the "interface" of Orderbook is tied to its implementation
 	// e.g. switch from BST to heap will be costly
-	// domain.Limit has the same issue
+	// entities.Limit has the same issue
 	BuyTree         *Limit
 	SellTree        *Limit
 	LowestSell      *Limit
@@ -75,32 +21,6 @@ type Orderbook struct {
 func NewOrderbook() *Orderbook {
 	return &Orderbook{
 		idToOrderMap: make(map[int64]*Order),
-	}
-}
-
-func setupNewLimit(incomingOrder *Order) *Limit {
-	newLimit := NewLimit(incomingOrder.GetLimitPrice())
-	newLimit.Parent = nil
-	newLimit.LeftChild = nil
-	newLimit.RightChild = nil
-	newLimit.AddOrder(incomingOrder)
-	return newLimit
-}
-
-func treeToArrayHelper(node *Limit, array *[]*Limit) {
-	if node == nil {
-		return
-	}
-	if node.LeftChild == nil && node.RightChild == nil {
-		*array = append(*array, node)
-		return
-	}
-	if node.LeftChild != nil {
-		treeToArrayHelper(node.LeftChild, array)
-	}
-	*array = append(*array, node)
-	if node.RightChild != nil {
-		treeToArrayHelper(node.RightChild, array)
 	}
 }
 
@@ -164,14 +84,6 @@ func (ob *Orderbook) PlaceLimitOrder(incomingOrder Order) {
 		}
 	}
 	ob.idToOrderMap[incomingOrder.GetId()] = &incomingOrder
-}
-
-func findLeftMost(node *Limit) *Limit {
-	if node != nil && node.LeftChild != nil {
-		return findLeftMost(node.LeftChild)
-	} else {
-		return node
-	}
 }
 
 func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) []Trade {
@@ -283,20 +195,6 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) []Trade {
 	return tradesArray
 }
 
-func sumTree(node *Limit) float64 {
-	if node == nil {
-		return 0
-	}
-	if node.LeftChild == nil && node.RightChild == nil {
-		return node.TotalVolume
-	}
-	sum := 0.0
-	sum += sumTree(node.LeftChild)
-	sum += node.TotalVolume
-	sum += sumTree(node.RightChild)
-	return sum
-}
-
 func (ob *Orderbook) GetTotalVolumeAllSells() float64 {
 	return sumTree(ob.SellTree)
 }
@@ -307,6 +205,34 @@ func (ob *Orderbook) GetTotalVolumeAllBuys() float64 {
 
 func (ob *Orderbook) GetLastTrades() []Trade {
 	return ob.lastTrades
+}
+
+func (ob *Orderbook) CancelOrder(orderId int64) (string, bool, float64, float64) {
+	order, ok := ob.idToOrderMap[orderId]
+	if !ok {
+		return "", false, 0, 0
+	}
+
+	limit := order.ParentLimit
+	limit.DeleteOrder(order)
+	if limit.HeadOrder == nil {
+		ob.clearLimit(limit, order.GetIsBid())
+		if limit == ob.HighestBuy {
+			ob.HighestBuy = findLeftMost(ob.BuyTree)
+		} else if limit == ob.LowestSell {
+			ob.LowestSell = findLeftMost(ob.SellTree)
+		}
+	}
+	// TODO: remove order from map
+	delete(ob.idToOrderMap, order.GetId())
+
+	return order.GetUserId(), order.GetIsBid(), order.GetLimitPrice(), order.Size
+}
+
+func (ob *Orderbook) GetBestLimits(tree *Limit, k int) []*Limit {
+	array := make([]*Limit, 0)
+	ob.dfTraversal(tree, k, &array)
+	return array
 }
 
 func (ob *Orderbook) clearLimit(limit *Limit, isBid bool) {
@@ -370,27 +296,18 @@ func (ob *Orderbook) clearLimit(limit *Limit, isBid bool) {
 		}
 	}
 }
-
-func (ob *Orderbook) CancelOrder(orderId int64) (string, bool, float64, float64) {
-	order, ok := ob.idToOrderMap[orderId]
-	if !ok {
-		return "", false, 0, 0
+func sumTree(node *Limit) float64 {
+	if node == nil {
+		return 0
 	}
-
-	limit := order.ParentLimit
-	limit.DeleteOrder(order)
-	if limit.HeadOrder == nil {
-		ob.clearLimit(limit, order.GetIsBid())
-		if limit == ob.HighestBuy {
-			ob.HighestBuy = findLeftMost(ob.BuyTree)
-		} else if limit == ob.LowestSell {
-			ob.LowestSell = findLeftMost(ob.SellTree)
-		}
+	if node.LeftChild == nil && node.RightChild == nil {
+		return node.TotalVolume
 	}
-	// TODO: remove order from map
-	delete(ob.idToOrderMap, order.GetId())
-
-	return order.GetUserId(), order.GetIsBid(), order.GetLimitPrice(), order.Size
+	sum := 0.0
+	sum += sumTree(node.LeftChild)
+	sum += node.TotalVolume
+	sum += sumTree(node.RightChild)
+	return sum
 }
 
 func (ob *Orderbook) dfTraversal(node *Limit, k int, arr *[]*Limit) {
@@ -406,9 +323,35 @@ func (ob *Orderbook) dfTraversal(node *Limit, k int, arr *[]*Limit) {
 	}
 	ob.dfTraversal(node.RightChild, k, arr)
 }
+func findLeftMost(node *Limit) *Limit {
+	if node != nil && node.LeftChild != nil {
+		return findLeftMost(node.LeftChild)
+	} else {
+		return node
+	}
+}
+func setupNewLimit(incomingOrder *Order) *Limit {
+	newLimit := NewLimit(incomingOrder.GetLimitPrice())
+	newLimit.Parent = nil
+	newLimit.LeftChild = nil
+	newLimit.RightChild = nil
+	newLimit.AddOrder(incomingOrder)
+	return newLimit
+}
 
-func (ob *Orderbook) GetBestLimits(tree *Limit, k int) []*Limit {
-	array := make([]*Limit, 0)
-	ob.dfTraversal(tree, k, &array)
-	return array
+func treeToArrayHelper(node *Limit, array *[]*Limit) {
+	if node == nil {
+		return
+	}
+	if node.LeftChild == nil && node.RightChild == nil {
+		*array = append(*array, node)
+		return
+	}
+	if node.LeftChild != nil {
+		treeToArrayHelper(node.LeftChild, array)
+	}
+	*array = append(*array, node)
+	if node.RightChild != nil {
+		treeToArrayHelper(node.RightChild, array)
+	}
 }

@@ -16,7 +16,7 @@ import (
 	"github.com/trandinhkhoa/crypto-exchange/server"
 )
 
-const exchangeDomain = "http://localhost:3000"
+const exchangeentities = "http://localhost:3000"
 
 type PlaceLimitOrderResponseBody struct {
 	Msg   string
@@ -38,7 +38,7 @@ type BestBidPriceResponseBody struct {
 }
 
 func GetCurrentPrice() (float64, error) {
-	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeDomain+"/book/ETHUSD/currentPrice", nil)
+	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeentities+"/book/ETHUSD/currentPrice", nil)
 	respPrice, _ := http.DefaultClient.Do(reqPrice)
 	decodedRespPrice := &CurrentPriceResponseBody{}
 	if err := json.NewDecoder(respPrice.Body).Decode(decodedRespPrice); err != nil {
@@ -49,7 +49,7 @@ func GetCurrentPrice() (float64, error) {
 }
 
 func GetBestAskPrice() (float64, error) {
-	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeDomain+"/book/ETHUSD/bestAsk", nil)
+	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeentities+"/book/ETHUSD/bestAsk", nil)
 	respPrice, _ := http.DefaultClient.Do(reqPrice)
 	decodedRespPrice := &BestAskPriceResponseBody{}
 	if err := json.NewDecoder(respPrice.Body).Decode(decodedRespPrice); err != nil {
@@ -59,7 +59,7 @@ func GetBestAskPrice() (float64, error) {
 }
 
 func GetBestBidPrice() (float64, error) {
-	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeDomain+"/book/ETHUSD/bestBid", nil)
+	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeentities+"/book/ETHUSD/bestBid", nil)
 	respPrice, _ := http.DefaultClient.Do(reqPrice)
 	decodedRespPrice := &BestBidPriceResponseBody{}
 	if err := json.NewDecoder(respPrice.Body).Decode(decodedRespPrice); err != nil {
@@ -154,7 +154,7 @@ func MakeMarket() {
 }
 
 func PlaceOrder(order server.PlaceOrderRequest) error {
-	url := exchangeDomain + "/order"
+	url := exchangeentities + "/order"
 	orderBody, err := json.Marshal(order)
 	if err != nil {
 		return err
