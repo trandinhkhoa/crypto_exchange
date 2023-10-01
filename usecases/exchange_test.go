@@ -1,13 +1,22 @@
 package usecases_test
 
 import (
+	"io"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/trandinhkhoa/crypto-exchange/entities"
 	"github.com/trandinhkhoa/crypto-exchange/usecases"
 )
 
+// do extra setup or teardown before or after a test executes.
+// It is also sometimes necessary to control which code runs on the main thread.
+func TestMain(m *testing.M) {
+	// Disable logrus in tests
+	logrus.SetOutput(io.Discard)
+	m.Run()
+}
 func TestPlaceLimitOrderExchange(t *testing.T) {
 	ex := usecases.NewExchange()
 

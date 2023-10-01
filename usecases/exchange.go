@@ -1,9 +1,9 @@
 package usecases
 
 import (
-	"fmt"
 	"sync"
 
+	"github.com/sirupsen/logrus"
 	"github.com/trandinhkhoa/crypto-exchange/entities"
 )
 
@@ -58,7 +58,7 @@ func (ex Exchange) GetBestSells(ticker string, k int) []*entities.Limit {
 }
 
 func (ex Exchange) GetLastPrice(ticker string) float64 {
-	return ex.orderbooksMap[Ticker(ticker)].LastTradedPrice
+	return ex.orderbooksMap[Ticker(ticker)].GetLastTradedPrice()
 }
 
 func (ex *Exchange) PlaceLimitOrder(o entities.Order) {
@@ -99,40 +99,36 @@ func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
 		buyer := ex.usersMap[trade.GetBuyer().GetUserId()]
 		seller := ex.usersMap[trade.GetSeller().GetUserId()]
 
-		buyer.Balance[ticker1] += trade.Size
+		buyer.Balance[ticker1] += trade.GetSize()
 		if trade.GetBuyer().GetOrderType() == entities.MarketOrderType {
-			buyer.Balance[ticker2] -= trade.Size * trade.Price
+			buyer.Balance[ticker2] -= trade.GetSize() * trade.GetPrice()
 		}
 
 		if trade.GetSeller().GetOrderType() == entities.MarketOrderType {
-			seller.Balance[ticker1] -= trade.Size
+			seller.Balance[ticker1] -= trade.GetSize()
 		}
 		// TODO: john's limit order might be filled (here) at the same time as he is placing a new limit order
 		// -> concurrent write
-		seller.Balance[ticker2] += trade.Size * trade.Price
-		fmt.Println(trade)
+		seller.Balance[ticker2] += trade.GetSize() * trade.GetPrice()
+		logrus.WithFields(logrus.Fields{
+			"trade": trade,
+		}).Info("Order Executed")
 	}
 	return tradesArray
 }
 
 func (ex *Exchange) RegisterUser(userId string) {
 	// TODO: should have an array of tickers, iterate it and set their balances to zeros
-	newUser := entities.User{
-		UserId:  userId,
-		Balance: make(map[string]float64),
-	}
+	newUser := entities.NewUser(userId, make(map[string]float64))
 	newUser.Balance[string(ETHUSD)[:3]] = 0
 	newUser.Balance[string(ETHUSD)[3:]] = 0
-	ex.usersMap[userId] = &newUser
+	ex.usersMap[userId] = newUser
 }
 
 func (ex *Exchange) RegisterUserWithBalance(userId string, balance map[string]float64) {
 	// TODO: should have an array of tickers, iterate it and set their balances to zeros
-	newUser := entities.User{
-		UserId:  userId,
-		Balance: balance,
-	}
-	ex.usersMap[userId] = &newUser
+	newUser := entities.NewUser(userId, balance)
+	ex.usersMap[userId] = newUser
 }
 
 func (ex *Exchange) GetBook(ticker string) ([]*entities.Limit, float64, []*entities.Limit, float64) {

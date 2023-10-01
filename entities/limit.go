@@ -5,22 +5,25 @@ import "fmt"
 // for each price level(limit) we need to know total volume and the corresponding orders
 type Limit struct {
 	limitPrice  float64
-	TotalVolume float64
-	Parent      *Limit
-	LeftChild   *Limit
-	RightChild  *Limit
-	//TODO: how to make HeadOrder/TailOrder "readonly"
-	HeadOrder *Order
-	TailOrder *Order
+	totalVolume float64
+	parent      *Limit
+	leftChild   *Limit
+	rightChild  *Limit
+	headOrder   *Order
+	tailOrder   *Order
+}
+
+func (l Limit) GetTotalVolume() float64 {
+	return l.totalVolume
 }
 
 func (l Limit) String() string {
-	str := fmt.Sprintf("{\"limitPrice\": %.2f, \"totalVolume\": %.2f, \"orders\":", l.GetLimitPrice(), l.TotalVolume)
+	str := fmt.Sprintf("{\"limitPrice\": %.2f, \"totalVolume\": %.2f, \"orders\":", l.GetLimitPrice(), l.totalVolume)
 	str += "["
-	iterator := l.HeadOrder
+	iterator := l.headOrder
 	for iterator != nil {
 		str += iterator.String()
-		iterator = iterator.NextOrder
+		iterator = iterator.nextOrder
 		if iterator != nil {
 			str += ","
 		}
@@ -40,37 +43,59 @@ func (l *Limit) GetLimitPrice() float64 {
 }
 
 func (l *Limit) AddOrder(newOrder *Order) {
-	if l.TailOrder == nil {
+	if l.tailOrder == nil {
 		// if empty
-		l.HeadOrder = newOrder
-		l.TailOrder = newOrder
+		l.headOrder = newOrder
+		l.tailOrder = newOrder
 	} else {
-		l.TailOrder.NextOrder = newOrder
-		newOrder.PrevOrder = l.TailOrder
-		l.TailOrder = l.TailOrder.NextOrder
+		l.tailOrder.nextOrder = newOrder
+		newOrder.prevOrder = l.tailOrder
+		l.tailOrder = l.tailOrder.nextOrder
 	}
-	newOrder.ParentLimit = l
-	l.TotalVolume += float64(newOrder.Size)
+	newOrder.parentLimit = l
+	l.totalVolume += float64(newOrder.Size)
 	// TODO: throw error if sell limit but o is bid
 }
 
-func (l *Limit) DeleteOrder(order *Order) {
-	l.TotalVolume -= order.Size
-	if (order.PrevOrder == nil) && (order.NextOrder == nil) {
+func (l *Limit) DeleteOrderById(id int64) {
+	iterator := l.headOrder
+	for iterator != nil {
+		if iterator.id == id {
+			break
+		}
+		iterator = iterator.nextOrder
+	}
+	l.deleteOrder(iterator)
+}
+
+func (l *Limit) deleteOrder(order *Order) {
+	l.totalVolume -= order.Size
+	if (order.prevOrder == nil) && (order.nextOrder == nil) {
 		// if the only one left
-		l.HeadOrder = nil
-		l.TailOrder = nil
-	} else if order.PrevOrder == nil {
+		l.headOrder = nil
+		l.tailOrder = nil
+	} else if order.prevOrder == nil {
 		// if deleting the head
-		l.HeadOrder = order.NextOrder
-		l.HeadOrder.PrevOrder = nil
+		l.headOrder = order.nextOrder
+		l.headOrder.prevOrder = nil
 	} else {
-		prevOrder := order.PrevOrder
-		nextOrder := order.NextOrder
-		prevOrder.NextOrder = nextOrder
+		prevOrder := order.prevOrder
+		nextOrder := order.nextOrder
+		prevOrder.nextOrder = nextOrder
 		if nextOrder != nil {
 			// if not the last one
-			nextOrder.PrevOrder = prevOrder
+			nextOrder.prevOrder = prevOrder
 		}
 	}
+}
+
+func (l Limit) GetAllOrders() []Order {
+	ordersList := make([]Order, 0)
+	iterator := l.headOrder
+	for iterator != nil {
+		ordersList = append(ordersList, *iterator)
+		iterator = iterator.nextOrder
+	}
+
+	return ordersList
 }

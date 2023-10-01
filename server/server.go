@@ -116,7 +116,6 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 }
 
 func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
-	// TODO: "ticker" -> "ticker"
 	// TODO: should not need to convert to usescase.TIcker
 	ticker := usecases.Ticker(c.Param("ticker"))
 	orderBookData := OrderBookResponse{
@@ -127,34 +126,30 @@ func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
 	}
 
 	buybook, bVolume, sellbook, sVolume := handler.ex.GetBook(string(ticker))
-	// TODO: controller layer should not depend/know the implementation of the book like this
-	// (the fact that each price level (limit) is implemented as a linked list)
 	for _, limit := range buybook {
-		order := limit.HeadOrder
-		for order != nil {
+		ordersList := limit.GetAllOrders()
+		for _, order := range ordersList {
 			orderData := &OrderResponse{
 				ID:        int(order.GetId()),
 				IsBid:     order.GetIsBid(),
-				Size:      order.Size,
+				Size:      order.GetSize(),
 				Price:     order.GetLimitPrice(),
 				Timestamp: order.GetTimeStamp(),
 			}
 			orderBookData.Bids = append(orderBookData.Bids, orderData)
-			order = order.NextOrder
 		}
 	}
 	for _, limit := range sellbook {
-		order := limit.HeadOrder
-		for order != nil {
+		ordersList := limit.GetAllOrders()
+		for _, order := range ordersList {
 			orderData := &OrderResponse{
 				ID:        int(order.GetId()),
 				IsBid:     order.GetIsBid(),
-				Size:      order.Size,
+				Size:      order.GetSize(),
 				Price:     order.GetLimitPrice(),
 				Timestamp: order.GetTimeStamp(),
 			}
 			orderBookData.Asks = append(orderBookData.Asks, orderData)
-			order = order.NextOrder
 		}
 	}
 	orderBookData.TotalAsksVolume = sVolume
@@ -313,7 +308,7 @@ func (handler WebServiceHandler) WebSocketHandlerBestBuys(ws *websocket.Conn) {
 		for _, limit := range arr {
 			response := LimitResponse{
 				Price:  limit.GetLimitPrice(),
-				Volume: limit.TotalVolume,
+				Volume: limit.GetTotalVolume(),
 			}
 			responsesArr = append(responsesArr, response)
 		}
@@ -337,7 +332,7 @@ func (handler WebServiceHandler) WebSocketHandlerBestSells(ws *websocket.Conn) {
 		for _, limit := range arr {
 			response := LimitResponse{
 				Price:  limit.GetLimitPrice(),
-				Volume: limit.TotalVolume,
+				Volume: limit.GetTotalVolume(),
 			}
 			responsesArr = append(responsesArr, response)
 		}

@@ -6,6 +6,23 @@ import (
 	"time"
 )
 
+// TODO: user need crypto wallet
+type User struct {
+	userId  string
+	Balance map[string]float64
+}
+
+func (u User) GetUserId() string {
+	return u.userId
+}
+
+func NewUser(userId string, balance map[string]float64) *User {
+	return &User{
+		userId:  userId,
+		Balance: balance,
+	}
+}
+
 type OrderType string
 
 const (
@@ -24,9 +41,9 @@ type Order struct {
 	Size        float64
 	limitPrice  float64
 	timestamp   int64
-	NextOrder   *Order
-	PrevOrder   *Order
-	ParentLimit *Limit
+	nextOrder   *Order
+	prevOrder   *Order
+	parentLimit *Limit
 }
 
 func NewOrder(
@@ -97,9 +114,6 @@ func (o *Order) GetLimitPrice() float64 {
 func (o *Order) GetTimeStamp() int64 {
 	return o.timestamp
 }
-
-// TODO: user need crypto wallet
-type User struct {
-	UserId  string
-	Balance map[string]float64
+func (o Order) GetSize() float64 {
+	return o.Size
 }

@@ -14,45 +14,13 @@ type Orderbook struct {
 	HighestBuy      *Limit
 	lastTrades      []Trade
 	idToOrderMap    map[int64]*Order
-	LastTradedPrice float64
+	lastTradedPrice float64
 }
 
 // TODO: hide all the pointers, make sure if &Orderbook{} is used it would be useless
 func NewOrderbook() *Orderbook {
 	return &Orderbook{
 		idToOrderMap: make(map[int64]*Order),
-	}
-}
-
-// TODO: dont expose the pointer
-func TreeToArray(node *Limit) []*Limit {
-	array := make([]*Limit, 0)
-	treeToArrayHelper(node, &array)
-	return array
-}
-
-func travelLimitTreeAndAddOrderToLimit(node *Limit, incomingOrder *Order) *Limit {
-	if incomingOrder.GetLimitPrice() == node.HeadOrder.GetLimitPrice() {
-		node.AddOrder(incomingOrder)
-		return nil
-	} else if incomingOrder.IsBetter(node.HeadOrder) {
-		if node.LeftChild != nil {
-			return travelLimitTreeAndAddOrderToLimit(node.LeftChild, incomingOrder)
-		} else {
-			newLimit := setupNewLimit(incomingOrder)
-			node.LeftChild = newLimit
-			newLimit.Parent = node
-			return newLimit
-		}
-	} else {
-		if node.RightChild != nil {
-			return travelLimitTreeAndAddOrderToLimit(node.RightChild, incomingOrder)
-		} else {
-			newLimit := setupNewLimit(incomingOrder)
-			node.RightChild = newLimit
-			newLimit.Parent = node
-			return newLimit
-		}
 	}
 }
 
@@ -109,7 +77,7 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) []Trade {
 	}
 
 	for incomingOrder.Size > 0 {
-		existingOrder := bestLimit.HeadOrder
+		existingOrder := bestLimit.headOrder
 		if existingOrder == nil {
 			fmt.Println("HELLO  existingOrder == nil")
 		}
@@ -128,7 +96,7 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) []Trade {
 		biggerOrder.Size = biggerOrder.Size - sizeFilled
 		smallerOrder.Size = 0
 		if existingOrder.Size == 0 {
-			bestLimit.DeleteOrder(existingOrder)
+			bestLimit.deleteOrder(existingOrder)
 		}
 
 		var buy *Order
@@ -148,34 +116,34 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) []Trade {
 			sizeFilled,
 			existingOrder.isBid))
 
-		bestLimit.TotalVolume -= sizeFilled
+		bestLimit.totalVolume -= sizeFilled
 
 		// if current limit is out of liquidity, remove it and move on to next limit
 		// this check for empty limit, YIKES
 		// if bestLimit.TotalVolume == 0 {
-		if bestLimit.HeadOrder == nil {
-			if bestLimit.Parent == nil && bestLimit.RightChild == nil {
+		if bestLimit.headOrder == nil {
+			if bestLimit.parent == nil && bestLimit.rightChild == nil {
 				bestLimit = nil
 				makerTree = nil
 				break
 			}
-			if bestLimit.Parent != nil {
-				parent := bestLimit.Parent
-				newChild := bestLimit.RightChild
+			if bestLimit.parent != nil {
+				parent := bestLimit.parent
+				newChild := bestLimit.rightChild
 				// cut link parent to current lowest sell both ways
 				// link parent - child both ways
 				// current lowest has to be the left child of its parent
-				parent.LeftChild = newChild
+				parent.leftChild = newChild
 				if newChild != nil {
-					newChild.Parent = parent
+					newChild.parent = parent
 				}
-				bestLimit.Parent = nil
+				bestLimit.parent = nil
 
 				bestLimit = findLeftMost(parent)
 			} else {
 				// if root
-				makerTree = bestLimit.RightChild
-				makerTree.Parent = nil
+				makerTree = bestLimit.rightChild
+				makerTree.parent = nil
 				bestLimit = findLeftMost(makerTree)
 			}
 		}
@@ -191,20 +159,24 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) []Trade {
 		ob.HighestBuy = bestLimit
 	}
 	ob.lastTrades = append(ob.lastTrades, tradesArray...)
-	ob.LastTradedPrice = tradesArray[len(tradesArray)-1].GetPrice()
+	ob.lastTradedPrice = tradesArray[len(tradesArray)-1].GetPrice()
 	return tradesArray
 }
 
-func (ob *Orderbook) GetTotalVolumeAllSells() float64 {
+func (ob Orderbook) GetTotalVolumeAllSells() float64 {
 	return sumTree(ob.SellTree)
 }
 
-func (ob *Orderbook) GetTotalVolumeAllBuys() float64 {
+func (ob Orderbook) GetTotalVolumeAllBuys() float64 {
 	return sumTree(ob.BuyTree)
 }
 
-func (ob *Orderbook) GetLastTrades() []Trade {
+func (ob Orderbook) GetLastTrades() []Trade {
 	return ob.lastTrades
+}
+
+func (ob Orderbook) GetLastTradedPrice() float64 {
+	return ob.lastTradedPrice
 }
 
 func (ob *Orderbook) CancelOrder(orderId int64) (string, bool, float64, float64) {
@@ -213,9 +185,9 @@ func (ob *Orderbook) CancelOrder(orderId int64) (string, bool, float64, float64)
 		return "", false, 0, 0
 	}
 
-	limit := order.ParentLimit
-	limit.DeleteOrder(order)
-	if limit.HeadOrder == nil {
+	limit := order.parentLimit
+	limit.deleteOrder(order)
+	if limit.headOrder == nil {
 		ob.clearLimit(limit, order.GetIsBid())
 		if limit == ob.HighestBuy {
 			ob.HighestBuy = findLeftMost(ob.BuyTree)
@@ -229,7 +201,7 @@ func (ob *Orderbook) CancelOrder(orderId int64) (string, bool, float64, float64)
 	return order.GetUserId(), order.GetIsBid(), order.GetLimitPrice(), order.Size
 }
 
-func (ob *Orderbook) GetBestLimits(tree *Limit, k int) []*Limit {
+func (ob Orderbook) GetBestLimits(tree *Limit, k int) []*Limit {
 	array := make([]*Limit, 0)
 	ob.dfTraversal(tree, k, &array)
 	return array
@@ -237,8 +209,8 @@ func (ob *Orderbook) GetBestLimits(tree *Limit, k int) []*Limit {
 
 func (ob *Orderbook) clearLimit(limit *Limit, isBid bool) {
 
-	parent := limit.Parent
-	rightChild := limit.RightChild
+	parent := limit.parent
+	rightChild := limit.rightChild
 	leftMostOfRightSide := findLeftMost(rightChild)
 
 	// replace current node with leftMostOfRightSide
@@ -246,52 +218,52 @@ func (ob *Orderbook) clearLimit(limit *Limit, isBid bool) {
 		// detach leftMostOfRightSide from its parent
 		// leftMostOfRightSide.Parent == nil ?? -> leftMostOfRightSide == root
 		// ; but leftMostleftMostOfRightSide == current.Child -> impossible
-		if leftMostOfRightSide == leftMostOfRightSide.Parent.LeftChild {
-			leftMostOfRightSide.Parent.LeftChild = nil
+		if leftMostOfRightSide == leftMostOfRightSide.parent.leftChild {
+			leftMostOfRightSide.parent.leftChild = nil
 		}
-		if leftMostOfRightSide == leftMostOfRightSide.Parent.RightChild {
-			leftMostOfRightSide.Parent.RightChild = nil
+		if leftMostOfRightSide == leftMostOfRightSide.parent.rightChild {
+			leftMostOfRightSide.parent.rightChild = nil
 		}
-		leftMostOfRightSide.Parent = nil
+		leftMostOfRightSide.parent = nil
 
 		// connect current parent to leftMostOfRightSide
-		if parent != nil && parent.LeftChild == limit {
-			parent.LeftChild = leftMostOfRightSide
-		} else if parent != nil && parent.RightChild == limit {
-			parent.RightChild = leftMostOfRightSide
+		if parent != nil && parent.leftChild == limit {
+			parent.leftChild = leftMostOfRightSide
+		} else if parent != nil && parent.rightChild == limit {
+			parent.rightChild = leftMostOfRightSide
 		}
-		leftMostOfRightSide.Parent = parent
+		leftMostOfRightSide.parent = parent
 
 		// connect leftMostOfRightSide to current node's childs
-		leftMostOfRightSide.LeftChild = limit.LeftChild
-		if leftMostOfRightSide != limit.RightChild {
-			leftMostOfRightSide.RightChild = limit.RightChild
+		leftMostOfRightSide.leftChild = limit.leftChild
+		if leftMostOfRightSide != limit.rightChild {
+			leftMostOfRightSide.rightChild = limit.rightChild
 		}
-		if limit.LeftChild != nil {
-			limit.LeftChild.Parent = leftMostOfRightSide
+		if limit.leftChild != nil {
+			limit.leftChild.parent = leftMostOfRightSide
 		}
-		if limit.RightChild != nil {
-			limit.RightChild.Parent = leftMostOfRightSide
+		if limit.rightChild != nil {
+			limit.rightChild.parent = leftMostOfRightSide
 		}
 
 		// detach current node
-		limit.Parent = nil
-		limit.LeftChild = nil
-		limit.RightChild = nil
+		limit.parent = nil
+		limit.leftChild = nil
+		limit.rightChild = nil
 	} else {
 		// if right side empty, just move up left side
 		if parent != nil {
 			// if not root
-			if parent.LeftChild == limit {
-				parent.LeftChild = limit.LeftChild
+			if parent.leftChild == limit {
+				parent.leftChild = limit.leftChild
 			} else {
-				parent.RightChild = limit.LeftChild
+				parent.rightChild = limit.leftChild
 			}
 		} else {
 			if isBid {
-				ob.BuyTree = limit.LeftChild
+				ob.BuyTree = limit.leftChild
 			} else {
-				ob.SellTree = limit.LeftChild
+				ob.SellTree = limit.leftChild
 			}
 		}
 	}
@@ -300,13 +272,13 @@ func sumTree(node *Limit) float64 {
 	if node == nil {
 		return 0
 	}
-	if node.LeftChild == nil && node.RightChild == nil {
-		return node.TotalVolume
+	if node.leftChild == nil && node.rightChild == nil {
+		return node.totalVolume
 	}
 	sum := 0.0
-	sum += sumTree(node.LeftChild)
-	sum += node.TotalVolume
-	sum += sumTree(node.RightChild)
+	sum += sumTree(node.leftChild)
+	sum += node.totalVolume
+	sum += sumTree(node.rightChild)
 	return sum
 }
 
@@ -314,27 +286,27 @@ func (ob *Orderbook) dfTraversal(node *Limit, k int, arr *[]*Limit) {
 	if node == nil {
 		return
 	}
-	ob.dfTraversal(node.LeftChild, k, arr)
+	ob.dfTraversal(node.leftChild, k, arr)
 	if len(*arr) < k {
 		*arr = append(*arr, node)
 	}
 	if len(*arr) >= k {
 		return
 	}
-	ob.dfTraversal(node.RightChild, k, arr)
+	ob.dfTraversal(node.rightChild, k, arr)
 }
 func findLeftMost(node *Limit) *Limit {
-	if node != nil && node.LeftChild != nil {
-		return findLeftMost(node.LeftChild)
+	if node != nil && node.leftChild != nil {
+		return findLeftMost(node.leftChild)
 	} else {
 		return node
 	}
 }
 func setupNewLimit(incomingOrder *Order) *Limit {
 	newLimit := NewLimit(incomingOrder.GetLimitPrice())
-	newLimit.Parent = nil
-	newLimit.LeftChild = nil
-	newLimit.RightChild = nil
+	newLimit.parent = nil
+	newLimit.leftChild = nil
+	newLimit.rightChild = nil
 	newLimit.AddOrder(incomingOrder)
 	return newLimit
 }
@@ -343,15 +315,47 @@ func treeToArrayHelper(node *Limit, array *[]*Limit) {
 	if node == nil {
 		return
 	}
-	if node.LeftChild == nil && node.RightChild == nil {
+	if node.leftChild == nil && node.rightChild == nil {
 		*array = append(*array, node)
 		return
 	}
-	if node.LeftChild != nil {
-		treeToArrayHelper(node.LeftChild, array)
+	if node.leftChild != nil {
+		treeToArrayHelper(node.leftChild, array)
 	}
 	*array = append(*array, node)
-	if node.RightChild != nil {
-		treeToArrayHelper(node.RightChild, array)
+	if node.rightChild != nil {
+		treeToArrayHelper(node.rightChild, array)
+	}
+}
+
+// TODO: dont expose the pointer
+func TreeToArray(node *Limit) []*Limit {
+	array := make([]*Limit, 0)
+	treeToArrayHelper(node, &array)
+	return array
+}
+
+func travelLimitTreeAndAddOrderToLimit(node *Limit, incomingOrder *Order) *Limit {
+	if incomingOrder.GetLimitPrice() == node.headOrder.GetLimitPrice() {
+		node.AddOrder(incomingOrder)
+		return nil
+	} else if incomingOrder.IsBetter(node.headOrder) {
+		if node.leftChild != nil {
+			return travelLimitTreeAndAddOrderToLimit(node.leftChild, incomingOrder)
+		} else {
+			newLimit := setupNewLimit(incomingOrder)
+			node.leftChild = newLimit
+			newLimit.parent = node
+			return newLimit
+		}
+	} else {
+		if node.rightChild != nil {
+			return travelLimitTreeAndAddOrderToLimit(node.rightChild, incomingOrder)
+		} else {
+			newLimit := setupNewLimit(incomingOrder)
+			node.rightChild = newLimit
+			newLimit.parent = node
+			return newLimit
+		}
 	}
 }

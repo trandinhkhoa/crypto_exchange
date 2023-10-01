@@ -1,18 +1,21 @@
 package entities
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type Trade struct {
 	buyer        *Order
 	seller       *Order
-	Price        float64
-	Size         float64
+	price        float64
+	size         float64
 	isBuyerMaker bool
-	Timestamp    int64
+	timestamp    int64
 }
 
-// TODO: dont return order as it contains pointer,
-// as w/ the pointer, the content of h field can be modified
+// TODO: the comment below is not really an issue since the return value is a dereference pointer, essentially a copy
+// dont return order as it contains pointer, as w/ the pointer, the content of h field can be modified
 // defeat the point of encapsulation
 func (t Trade) GetBuyer() Order {
 	return *t.buyer
@@ -23,11 +26,11 @@ func (t Trade) GetSeller() Order {
 }
 
 func (t Trade) GetPrice() float64 {
-	return t.Price
+	return t.price
 }
 
 func (t Trade) GetSize() float64 {
-	return t.Size
+	return t.size
 }
 
 func (t Trade) GetIsBuyerMaker() bool {
@@ -35,7 +38,7 @@ func (t Trade) GetIsBuyerMaker() bool {
 }
 
 func (t Trade) GetTimeStamp() int64 {
-	return t.Timestamp
+	return t.timestamp
 }
 
 func NewTrade(
@@ -48,9 +51,21 @@ func NewTrade(
 	return &Trade{
 		buyer:        buyer,
 		seller:       seller,
-		Price:        price,
-		Size:         size,
+		price:        price,
+		size:         size,
 		isBuyerMaker: isBuyerMaker,
-		Timestamp:    time.Now().UnixNano(),
+		timestamp:    time.Now().UnixNano(),
 	}
+}
+
+func (t Trade) String() string {
+	str := fmt.Sprintf("{\"buyerOrderId\": %d, \"buyerUserId\": \"%s\", \"sellerOrderId\": %d, \"sellerUserId\": \"%s\", \"price\": %.2f, \"size\": %.2f}",
+		t.buyer.id,
+		t.buyer.userId,
+		t.seller.id,
+		t.seller.userId,
+		t.price,
+		t.size)
+	return str
+
 }

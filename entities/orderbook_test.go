@@ -29,78 +29,36 @@ func TestPlaceLimitOrder(t *testing.T) {
 	incomingOrder := entities.NewOrder("john", "ticker", true, entities.LimitOrderType, 1, 1000)
 	ob.PlaceLimitOrder(*incomingOrder)
 
-	assert.Equal(t, ob.HighestBuy.TotalVolume, 1.0)
-	assert.Equal(t, ob.HighestBuy.GetLimitPrice(), 1000.0)
-	assert.Equal(t, ob.HighestBuy.HeadOrder.GetUserId(), "john")
-
 	incomingOrder = entities.NewOrder("jim", "ticker", true, entities.LimitOrderType, 1, 900)
 	ob.PlaceLimitOrder(*incomingOrder)
-	assert.Equal(t, ob.HighestBuy.TotalVolume, 1.0)
-	assert.Equal(t, ob.HighestBuy.GetLimitPrice(), 1000.0)
-	assert.Equal(t, ob.HighestBuy.HeadOrder.GetUserId(), "john")
-
-	assert.Equal(t, ob.BuyTree.RightChild.TotalVolume, 1.0)
-	assert.Equal(t, ob.BuyTree.RightChild.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.BuyTree.RightChild.HeadOrder.GetUserId(), "jim")
 
 	incomingOrder = entities.NewOrder("jane", "ticker", true, entities.LimitOrderType, 4, 1100)
 	ob.PlaceLimitOrder(*incomingOrder)
-	assert.Equal(t, ob.HighestBuy.TotalVolume, 4.0)
-	assert.Equal(t, ob.HighestBuy.GetLimitPrice(), 1100.0)
-	assert.Equal(t, ob.HighestBuy.HeadOrder.GetUserId(), "jane")
-
-	assert.Equal(t, ob.BuyTree.RightChild.TotalVolume, 1.0)
-	assert.Equal(t, ob.BuyTree.RightChild.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.BuyTree.RightChild.HeadOrder.GetUserId(), "jim")
-
-	assert.Equal(t, ob.BuyTree.LeftChild.TotalVolume, 4.0)
-	assert.Equal(t, ob.BuyTree.LeftChild.GetLimitPrice(), 1100.0)
-	assert.Equal(t, ob.BuyTree.LeftChild.HeadOrder.GetUserId(), "jane")
 
 	incomingOrder = entities.NewOrder("jun", "ticker", true, entities.LimitOrderType, 9, 1005)
 	ob.PlaceLimitOrder(*incomingOrder)
-	assert.Equal(t, ob.HighestBuy.TotalVolume, 4.0)
-	assert.Equal(t, ob.HighestBuy.GetLimitPrice(), 1100.0)
-	assert.Equal(t, ob.HighestBuy.HeadOrder.GetUserId(), "jane")
-
-	assert.Equal(t, ob.BuyTree.RightChild.TotalVolume, 1.0)
-	assert.Equal(t, ob.BuyTree.RightChild.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.BuyTree.RightChild.HeadOrder.GetUserId(), "jim")
-
-	assert.Equal(t, ob.BuyTree.LeftChild.TotalVolume, 4.0)
-	assert.Equal(t, ob.BuyTree.LeftChild.GetLimitPrice(), 1100.0)
-	assert.Equal(t, ob.BuyTree.LeftChild.HeadOrder.GetUserId(), "jane")
-
-	assert.Equal(t, ob.BuyTree.LeftChild.RightChild.TotalVolume, 9.0)
-	assert.Equal(t, ob.BuyTree.LeftChild.RightChild.GetLimitPrice(), 1005.0)
-	assert.Equal(t, ob.BuyTree.LeftChild.RightChild.HeadOrder.GetUserId(), "jun")
 
 	incomingOrder = entities.NewOrder("jack", "ticker", true, entities.LimitOrderType, 9, 1005)
 	ob.PlaceLimitOrder(*incomingOrder)
-	assert.Equal(t, ob.HighestBuy.TotalVolume, 4.0)
+
+	assert.Equal(t, ob.HighestBuy.GetTotalVolume(), 4.0)
 	assert.Equal(t, ob.HighestBuy.GetLimitPrice(), 1100.0)
-	assert.Equal(t, ob.HighestBuy.HeadOrder.GetUserId(), "jane")
-
-	assert.Equal(t, ob.BuyTree.RightChild.TotalVolume, 1.0)
-	assert.Equal(t, ob.BuyTree.RightChild.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.BuyTree.RightChild.HeadOrder.GetUserId(), "jim")
-
-	assert.Equal(t, ob.BuyTree.LeftChild.TotalVolume, 4.0)
-	assert.Equal(t, ob.BuyTree.LeftChild.GetLimitPrice(), 1100.0)
-	assert.Equal(t, ob.BuyTree.LeftChild.HeadOrder.GetUserId(), "jane")
-
-	assert.Equal(t, ob.BuyTree.LeftChild.RightChild.TotalVolume, 18.0)
-	assert.Equal(t, ob.BuyTree.LeftChild.RightChild.GetLimitPrice(), 1005.0)
-	assert.Equal(t, ob.BuyTree.LeftChild.RightChild.HeadOrder.GetUserId(), "jun")
-	assert.Equal(t, ob.BuyTree.LeftChild.RightChild.TailOrder.GetUserId(), "jack")
 
 	arr := entities.TreeToArray(ob.BuyTree)
-	for index := 0; index < len(arr)-1; index++ {
-		if arr[index].GetLimitPrice() <= arr[index+1].GetLimitPrice() {
-			t.Errorf("Buy Limit not sorted in descending order ")
+	orderList := make([]entities.Order, 0)
+	for index := 0; index < len(arr); index++ {
+		if (index < len(arr)-1) && (arr[index].GetLimitPrice() <= arr[index+1].GetLimitPrice()) {
+			t.Errorf("Buy Limits not sorted in descending order ")
 			break
 		}
+		orderList = append(orderList, arr[index].GetAllOrders()...)
 	}
+
+	assert.Equal(t, "jane", orderList[0].GetUserId())
+	assert.Equal(t, "jun", orderList[1].GetUserId())
+	assert.Equal(t, "jack", orderList[2].GetUserId())
+	assert.Equal(t, "john", orderList[3].GetUserId())
+	assert.Equal(t, "jim", orderList[4].GetUserId())
 }
 
 func TestPlaceLimitOrderSell(t *testing.T) {
@@ -114,79 +72,33 @@ func TestPlaceLimitOrderSell(t *testing.T) {
 	incomingOrder := entities.NewOrder("john", "ticker", false, entities.LimitOrderType, 1, 1000)
 	ob.PlaceLimitOrder(*incomingOrder)
 
-	assert.Equal(t, ob.LowestSell.TotalVolume, 1.0)
-	assert.Equal(t, ob.LowestSell.GetLimitPrice(), 1000.0)
-	assert.Equal(t, ob.LowestSell.HeadOrder.GetUserId(), "john")
-
 	incomingOrder = entities.NewOrder("jim", "ticker", false, entities.LimitOrderType, 1, 900)
 	ob.PlaceLimitOrder(*incomingOrder)
-	assert.Equal(t, ob.LowestSell.TotalVolume, 1.0)
-	assert.Equal(t, ob.LowestSell.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.LowestSell.HeadOrder.GetUserId(), "jim")
-
-	assert.Equal(t, ob.SellTree.LeftChild.TotalVolume, 1.0)
-	assert.Equal(t, ob.SellTree.LeftChild.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.SellTree.LeftChild.HeadOrder.GetUserId(), "jim")
 
 	incomingOrder = entities.NewOrder("jane", "ticker", false, entities.LimitOrderType, 4, 1100)
 	ob.PlaceLimitOrder(*incomingOrder)
-	assert.Equal(t, ob.LowestSell.TotalVolume, 1.0)
-	assert.Equal(t, ob.LowestSell.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.LowestSell.HeadOrder.GetUserId(), "jim")
-
-	assert.Equal(t, ob.SellTree.LeftChild.TotalVolume, 1.0)
-	assert.Equal(t, ob.SellTree.LeftChild.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.SellTree.LeftChild.HeadOrder.GetUserId(), "jim")
-
-	assert.Equal(t, ob.SellTree.RightChild.TotalVolume, 4.0)
-	assert.Equal(t, ob.SellTree.RightChild.GetLimitPrice(), 1100.0)
-	assert.Equal(t, ob.SellTree.RightChild.HeadOrder.GetUserId(), "jane")
 
 	incomingOrder = entities.NewOrder("jun", "ticker", false, entities.LimitOrderType, 9, 1005)
 	ob.PlaceLimitOrder(*incomingOrder)
-	assert.Equal(t, ob.LowestSell.TotalVolume, 1.0)
-	assert.Equal(t, ob.LowestSell.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.LowestSell.HeadOrder.GetUserId(), "jim")
-
-	assert.Equal(t, ob.SellTree.LeftChild.TotalVolume, 1.0)
-	assert.Equal(t, ob.SellTree.LeftChild.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.SellTree.LeftChild.HeadOrder.GetUserId(), "jim")
-
-	assert.Equal(t, ob.SellTree.RightChild.TotalVolume, 4.0)
-	assert.Equal(t, ob.SellTree.RightChild.GetLimitPrice(), 1100.0)
-	assert.Equal(t, ob.SellTree.RightChild.HeadOrder.GetUserId(), "jane")
-
-	assert.Equal(t, ob.SellTree.RightChild.LeftChild.TotalVolume, 9.0)
-	assert.Equal(t, ob.SellTree.RightChild.LeftChild.GetLimitPrice(), 1005.0)
-	assert.Equal(t, ob.SellTree.RightChild.LeftChild.HeadOrder.GetUserId(), "jun")
 
 	incomingOrder = entities.NewOrder("jack", "ticker", false, entities.LimitOrderType, 9, 1005)
 	ob.PlaceLimitOrder(*incomingOrder)
-	assert.Equal(t, ob.LowestSell.TotalVolume, 1.0)
-	assert.Equal(t, ob.LowestSell.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.LowestSell.HeadOrder.GetUserId(), "jim")
-
-	assert.Equal(t, ob.SellTree.LeftChild.TotalVolume, 1.0)
-	assert.Equal(t, ob.SellTree.LeftChild.GetLimitPrice(), 900.0)
-	assert.Equal(t, ob.SellTree.LeftChild.HeadOrder.GetUserId(), "jim")
-
-	assert.Equal(t, ob.SellTree.RightChild.TotalVolume, 4.0)
-	assert.Equal(t, ob.SellTree.RightChild.GetLimitPrice(), 1100.0)
-	assert.Equal(t, ob.SellTree.RightChild.HeadOrder.GetUserId(), "jane")
-
-	assert.Equal(t, ob.SellTree.RightChild.LeftChild.TotalVolume, 18.0)
-	assert.Equal(t, ob.SellTree.RightChild.LeftChild.GetLimitPrice(), 1005.0)
-	assert.Equal(t, ob.SellTree.RightChild.LeftChild.HeadOrder.GetUserId(), "jun")
-	assert.Equal(t, ob.SellTree.RightChild.LeftChild.TailOrder.GetUserId(), "jack")
 
 	arr := entities.TreeToArray(ob.SellTree)
-	for index := 0; index < len(arr)-1; index++ {
-		if arr[index].GetLimitPrice() >= arr[index+1].GetLimitPrice() {
-			t.Errorf("Sell Limit not sorted in ascending order ")
+	orderList := make([]entities.Order, 0)
+	for index := 0; index < len(arr); index++ {
+		if (index < len(arr)-1) && (arr[index].GetLimitPrice() >= arr[index+1].GetLimitPrice()) {
+			t.Errorf("Sell Limits not sorted in ascending order ")
 			break
 		}
+		orderList = append(orderList, arr[index].GetAllOrders()...)
 	}
-	// fmt.Println(limitArrToJson(arr))
+
+	assert.Equal(t, "jim", orderList[0].GetUserId())
+	assert.Equal(t, "john", orderList[1].GetUserId())
+	assert.Equal(t, "jun", orderList[2].GetUserId())
+	assert.Equal(t, "jack", orderList[3].GetUserId())
+	assert.Equal(t, "jane", orderList[4].GetUserId())
 }
 func TestPlaceMarketOrderBuyOneFill(t *testing.T) {
 	// Root: 1000
@@ -220,6 +132,21 @@ func TestPlaceMarketOrderBuyOneFill(t *testing.T) {
 	assert.Equal(t, tradesArray[0].GetSeller().GetUserId(), "jim")
 	assert.Equal(t, tradesArray[0].GetPrice(), 900.0)
 	assert.Equal(t, tradesArray[0].GetSize(), 1.0)
+
+	arr := entities.TreeToArray(ob.SellTree)
+	orderList := make([]entities.Order, 0)
+	for index := 0; index < len(arr); index++ {
+		if (index < len(arr)-1) && (arr[index].GetLimitPrice() >= arr[index+1].GetLimitPrice()) {
+			t.Errorf("Sell Limits not sorted in ascending order ")
+			break
+		}
+		orderList = append(orderList, arr[index].GetAllOrders()...)
+	}
+
+	assert.Equal(t, "john", orderList[0].GetUserId())
+	assert.Equal(t, "jun", orderList[1].GetUserId())
+	assert.Equal(t, "jack", orderList[2].GetUserId())
+	assert.Equal(t, "jane", orderList[3].GetUserId())
 }
 
 func TestPlaceMarketOrderBuyOnePartialFill(t *testing.T) {
@@ -296,18 +223,23 @@ func TestPlaceMarketOrderBuyMultiFill(t *testing.T) {
 	incomingOrder = entities.NewOrder("lily", "ticker", true, entities.MarketOrderType, 0.5, 0)
 	tradesArray = ob.PlaceMarketOrder(*incomingOrder)
 	assert.Equal(t, ob.GetTotalVolumeAllSells(), 0.0)
+	// check returned trades array
 	assert.Equal(t, tradesArray[0].GetSeller().GetUserId(), "jane")
 	assert.Equal(t, tradesArray[0].GetSize(), 0.5)
 	assert.Equal(t, tradesArray[0].GetPrice(), 1100.0)
 
+	// check if orderbook recorded all trades across all placed market order
 	assert.Equal(t, ob.GetLastTrades()[0].GetSeller().GetUserId(), "jim")
 	assert.Equal(t, ob.GetLastTrades()[1].GetSeller().GetUserId(), "john")
 	assert.Equal(t, ob.GetLastTrades()[2].GetSeller().GetUserId(), "jun")
 	assert.Equal(t, ob.GetLastTrades()[3].GetSeller().GetUserId(), "jack")
 	assert.Equal(t, ob.GetLastTrades()[4].GetSeller().GetUserId(), "jane")
 	assert.Equal(t, ob.GetLastTrades()[5].GetSeller().GetUserId(), "jane")
+
+	arr := entities.TreeToArray(ob.SellTree)
+	assert.Equal(t, len(arr) == 0, true)
+
 	assert.Equal(t, ob.LowestSell == nil, true)
-	assert.Equal(t, ob.SellTree == nil, true)
 }
 
 func TestPlaceMarketOrderSellMultiFill(t *testing.T) {
@@ -349,18 +281,24 @@ func TestPlaceMarketOrderSellMultiFill(t *testing.T) {
 	incomingOrder = entities.NewOrder("lily", "ticker", false, entities.MarketOrderType, 0.5, 0)
 	tradesArray = ob.PlaceMarketOrder(*incomingOrder)
 	assert.Equal(t, ob.GetTotalVolumeAllBuys(), 0.0)
+
+	// check returned trades array
 	assert.Equal(t, tradesArray[0].GetBuyer().GetUserId(), "jim")
 	assert.Equal(t, tradesArray[0].GetSize(), 0.5)
 	assert.Equal(t, tradesArray[0].GetPrice(), 900.0)
 
+	// check if orderbook recorded all trades across all placed market order
 	assert.Equal(t, ob.GetLastTrades()[0].GetBuyer().GetUserId(), "jane")
 	assert.Equal(t, ob.GetLastTrades()[1].GetBuyer().GetUserId(), "jun")
 	assert.Equal(t, ob.GetLastTrades()[2].GetBuyer().GetUserId(), "jack")
 	assert.Equal(t, ob.GetLastTrades()[3].GetBuyer().GetUserId(), "john")
 	assert.Equal(t, ob.GetLastTrades()[4].GetBuyer().GetUserId(), "jim")
 	assert.Equal(t, ob.GetLastTrades()[5].GetBuyer().GetUserId(), "jim")
+
+	arr := entities.TreeToArray(ob.BuyTree)
+	assert.Equal(t, len(arr) == 0, true)
+
 	assert.Equal(t, ob.HighestBuy == nil, true)
-	assert.Equal(t, ob.BuyTree == nil, true)
 }
 
 func TestCancelOrderSimple(t *testing.T) {
