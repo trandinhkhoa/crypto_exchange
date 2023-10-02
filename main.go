@@ -20,8 +20,8 @@ func init() {
 func main() {
 	go server.StartServer()
 	time.Sleep(1 * time.Second)
-	// go client.MakeMarket()
-	go client.PlaceLimitFromFile()
+	go client.MakeMarket()
+	// go client.PlaceLimitFromFile()
 	go client.PlaceMarketRepeat()
 	select {}
 }

@@ -118,38 +118,43 @@ func PlaceLimitFromFile() {
 }
 
 func MakeMarket() {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(75 * time.Millisecond)
+	const spread = 0.2
+	const halfSpread = spread / 2.0
+
 	for {
-		bestAskPrice, _ := GetBestAskPrice()
-		if bestAskPrice == 0 {
-			bestAskPrice = simulateFetchPriceFromOtherExchange()
+		<-ticker.C
+
+		lastTradedPrice, err := GetCurrentPrice()
+		if err != nil || lastTradedPrice == 0 {
+			lastTradedPrice = simulateFetchPriceFromOtherExchange()
 		}
 
-		bestBidPrice, _ := GetBestBidPrice()
-		if bestBidPrice == 0 {
-			bestBidPrice = simulateFetchPriceFromOtherExchange()
-		}
+		// Calculate bid and ask prices centered around last traded price
+		bidPrice := lastTradedPrice - halfSpread
+		askPrice := lastTradedPrice + halfSpread
 
-		askBody := server.PlaceOrderRequest{
-			UserId:    "maker123",
-			OrderType: "LIMIT",
-			IsBid:     false,
-			Size:      1,
-			Price:     bestAskPrice + 1,
-			Ticker:    "ETHUSD",
-		}
+		// Place bid order
 		bidBody := server.PlaceOrderRequest{
 			UserId:    "maker123",
 			OrderType: "LIMIT",
 			IsBid:     true,
 			Size:      1,
-			Price:     bestBidPrice - 1,
+			Price:     bidPrice,
+			Ticker:    "ETHUSD",
+		}
+		PlaceOrder(bidBody)
+
+		// Place ask order
+		askBody := server.PlaceOrderRequest{
+			UserId:    "maker123",
+			OrderType: "LIMIT",
+			IsBid:     false,
+			Size:      1,
+			Price:     askPrice,
 			Ticker:    "ETHUSD",
 		}
 		PlaceOrder(askBody)
-		PlaceOrder(bidBody)
-
-		<-ticker.C
 	}
 }
 
@@ -187,20 +192,40 @@ func PlaceOrder(order server.PlaceOrderRequest) error {
 func PlaceMarketRepeat() {
 	timer := time.NewTimer(1500 * time.Millisecond)
 	<-timer.C
-	ticker := time.NewTicker(75 * time.Millisecond)
-	for {
-		isBid := true
-		if int(rand.Intn(9)) < 5 {
-			isBid = false
+	ticker := time.NewTicker(100 * time.Millisecond)
+	trendTicker := time.NewTicker(10 * time.Second) // To switch trend every X seconds
+
+	isUpwardTrend := true // Initialize as upward trend
+
+	go func() { // Goroutine to switch trend direction
+		for {
+			if rand.Intn(9) < 5 {
+				isUpwardTrend = !isUpwardTrend // Flip the trend direction
+			}
+			<-trendTicker.C
 		}
-		askBody := server.PlaceOrderRequest{
+	}()
+
+	for {
+		isBid := isUpwardTrend // Use the current trend direction
+		if isUpwardTrend {
+			if rand.Intn(9) < 3 {
+				isBid = false
+			}
+		} else {
+			if rand.Intn(9) >= 3 {
+				isBid = false
+			}
+		}
+
+		orderBody := server.PlaceOrderRequest{
 			UserId:    "traderJoe123",
 			OrderType: "MARKET",
 			IsBid:     isBid,
 			Size:      1,
 			Ticker:    "ETHUSD",
 		}
-		PlaceOrder(askBody)
+		PlaceOrder(orderBody)
 		<-ticker.C
 	}
 }
