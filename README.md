@@ -1,16 +1,9 @@
-# Implementation of a Crypto Exchange
+# Implementation of a Simple Crypto Exchange
 - For learning Go + trading engine
 - Orders matched uing Price-Time Priority
 - Execution here is just users' balance management
 - Simple market making
-- REST API + WebSocket API provided
-- TODO: actual documentations, below are just my memos
-- TODO: entities persistence + load order book from storage ?
-- TODO: there are things I do are not thread-safe
-- TODO: better separations between layers following the clean architecture from (entities, usecases, inteface, infra)
-- TODO: better decoupling between implementations and interfaces
-- TODO: handle Floating Point Precision
-- TODO: buy/sell button for front end
+- REST APIs + WebSocket APIs provided
 
 # Test
 ```
@@ -23,119 +16,227 @@ make test
 ```
 make run
 ```
-The server will run at port 3000.
+The server is hardcoded to run at port `3000`.
 - Launch the frontend.
 https://github.com/trandinhkhoa/crypto_exchange_frontend
-    - The frontend (port 8080) is already configured to connect to port 3000.
+    - The frontend (hardcoded to run at port `8080`) is already hardcoded to connect to port `3000`.
 
 # Demo
 Demo with the Front-end mentioned above
+
 ![](readmeImages/demo.gif)
 
+# Roadmap
+![](readmeImages/roadmap.png)
+
 # Match
-![](readmeImages/generic.png)
-![](readmeImages/match.png)
+- Orderbook has 2 sides: buy and sell
+- Price-Time priority matching
+    - each side consists of multiple price levels (limits), sorted
+    - each price level is a First-In-First-Out queue of orders
 
-# Exchange
-Ask = Sell
-Bid = Buy
+![](readmeImages/match2.png)
 
-Limit = a group of orders at a certain price level
-    - add order
-    - delete order
-    - fill
-        - if bid then iterate through ask orders and fill them. vice versa
-            - 1 of the order will be completely fill = the smaller (size) one
-                - return a Match
-                    - bid
-                    - ask
-                    - size filled
-                    - which price
-    - total volume
+# General flow
+- `trader 1` and `trader 2` is in `/client` folder, to simulate a mini live market
 
-Order = has size, which limit it is set, timestamp, type(bid or ask)
-
-orderbook = list of ask + list of bids + need a way to see which order is at a certain price
-    - e.g. (match : 10 btc ask against 4 btc bid ->  rest: need to find match for the remaining 6)
-    - (API) place limit order
-        - the rest of the order to the books
-        - limit.fill
-    - (API) bitTotalVolume = sum of all bid
-    - (API) askTotalVolume = sum of all ask
-    - (API) place market order
-        - test place market order
-            - test number of matches
-            - test number of ask/bid remaining
-            - test remaining volumn of ask/bid
-            - test if matches are what were expected (ask = sellOrder, bid = buyOrder, sizeFilled = smaller, price)
-            - test if ask/bid is filled
-            - test multi fill scenario
-
-- limit order
-- market order = fill at the best price
-    - thin order book = not a lot of size at a certain price level
-    - always minimum of 1 match (the best price)
-    - assumption: exchange has enough volume (liquidity)
-        - exchange pay market maker based on the total volume provided over a period of time
-        - has to check if there is enough volume -> bidTotalVolume
-            - e.g. order with 20 BTC but there is only 10 BTC
-
-- market maker: provide liquidity at all times to an exchange
-match = match ask against a bid, keep track of the size being filled (10 btc ask against 4 btc bid -> need to find match for the remaining 6)
-- how to determine price when your exchange boot up the first time ?
-    - aggregate the orderbook of other exchanges
+![](readmeImages/generalFlow.png)
 
 
-- vscode: debug running server:
-    - choose debug: "create launch.json" -> "Attach to Process:
-    - click on debug -> search for process name (not necessarily the process id) .e.g "exchange"
-- Go :
-    - `go mod init github.com/trandinhkhoa/crypto-exchange`
-    - FAQ: Should I check go.sum into git?
-        - https://twitter.com/FiloSottile/status/1029404663358087173
-        - Generally yes. With it, anyone with your sources doesn't have to trust other GitHub repositories and custom import path owners. Something better is coming, but in the meantime it's the same model as hashes in lock files.
-    - goroutines
-        - channel vs routine
-            - channels: for communication between goroutines
-            - mutex: for case where you dont care about communication and just want to make sure only one goroutine can access a variable at a time to avoid conflicts
-    - in Go, when you create a new instance of a struct using &OrderData{...}, you're allocating memory for that struct on the heap. This memory will remain valid and won't be garbage collected as long as there's a reference to it. In your case, the reference is maintained in the orderBookData.Bids slice.
-        - Once you exit the code block, the local variable orderData goes out of scope, but the memory it points to is still valid because the orderBookData.Bids slice holds a reference to it.
-    - if inner struct has a pointer to outer struct, be careful passing around the instance of the outer struct. If pass by value , the new arg will contain an instance of the inner class that is pointing to the "original" outer instance -> pass the pointer instead
-    - similarities:
-        - go get <> == npm install
-            - go.mod == package.json
-```
-	for _, iterator := range ex.orderbooks[marketType].BidLimits {
-		for _, order := range iterator.Orders {
-			orderData := &OrderData{
-				ID:        order.ID,
-				IsBid:     order.IsBid,
-				Size:      order.Size,
-				Price:     order.Limit.Price,
-				Timestamp: order.Timestamp,
-			}
-			orderBookData.Bids = append(orderBookData.Bids, orderData)
-		}
-	}
-	orderBookData.TotalAsksVolume += ex.orderbooks[marketType].GetTotalVolumeAllAsks()
-	orderBookData.TotalBidsVolume += ex.orderbooks[marketType].GetTotalVolumeAllBids()
+# API docs
 
-	return c.JSON(200, orderBookData)
-```
+## REST APIs
 
+### 1. Place an Order
 
-- makers:
-    - "make" liquidity by providing orders for others to trade against.
+- **HTTP Method**: POST
+- **Path**: `/order`
+- **Request Body**:
+    ```json
+    {
+    "UserId": "johnDoe",
+    "OrderType": "LIMIT" | "MARKET",
+    "IsBid": true | false,
+    "Size": 1.0,
+    "Price": 1.0,
+    "Ticker": "ETHUSD"
+    }
+    ```
+- **Response Body**: JSON object containing either `matches` for market orders or `msg` and `order` for limit orders.
 
-- misc.:
-    - if it is hard to write tests, probably architecture was poorly designed
-    - https://stackoverflow.com/questions/1222392/what-is-entities-driven-design-ddd/1222488#1222488
-        - Rob Knight's answer
-    - composition over inheritance ???
-        - top answer: https://www.reddit.com/r/AskProgramming/comments/lv7m7a/i_still_dont_understand_the_prefer_composition/
-    - https://www.reddit.com/r/golang/comments/9ls611/when_to_use_methods/?utm_source=reddit-android
-    - https://www.reddit.com/r/golang/comments/104m27v/how_to_avoid_oo_minded/
-    - https://www.gobeyond.dev/standard-package-layout/
-    - https://blog.cleancoder.com/
-    - https://manuel.kiessling.net/2012/09/28/applying-the-clean-architecture-to-go-applications/
-    - https://web.archive.org/web/20110219163448/http://howtohft.wordpress.com/2011/02/15/how-to-build-a-fast-limit-order-book/
+### 2. Get All Users
+
+- **HTTP Method**: GET
+- **Path**: `/users`
+- **Response Body**: JSON array of all users.
+    ```json
+    {
+    "maker123": {
+        "Balance": {
+        "ETH": 9567,
+        "USD": 29555.099999999293
+        }
+    },
+    "me": {
+        "Balance": {
+        "ETH": 0,
+        "USD": 1000
+        }
+    },
+    "traderJoe123": {
+        "Balance": {
+        "ETH": -528,
+        "USD": 538735.5000000062
+        }
+    }
+    }
+    ```
+
+### 3. Get Specific User
+
+- **HTTP Method**: GET
+- **Path**: `/users/:userId`
+- **Path Parameter**: `userId` - User ID
+- **Response Body**: JSON object of the specified user.
+    ```json
+    {
+    "Balance": {
+        "ETH": 0,
+        "USD": 1000
+    }
+    }
+    ```
+
+### 4. Get Order Book
+
+- **HTTP Method**: GET
+- **Path**: `/book/:ticker`
+- **Path Parameter**: `ticker` - Ticker symbol .e.g ETHUSD
+- **Response Body**: JSON object containing order book details.
+    ```json
+    "TotalAsksVolume": 1,
+    "TotalBidsVolume": 1,
+    "Asks": [
+        {
+        "ID": 803767546,
+        "UserId": "jane",
+        "IsBid": false,
+        "Size": 1,
+        "Price": 999.3999999999999,
+        "Timestamp": 1696370360524191000
+        },
+    ],
+    "Asks": [
+        {
+        "ID": 803767546,
+        "UserId": "john",
+        "IsBid": true,
+        "Size": 1,
+        "Price": 999.3999999999999,
+        "Timestamp": 1696370360524191000
+        },
+    ],
+    ```
+
+### 5. Get Current Price
+
+- **HTTP Method**: GET
+- **Path**: `/book/:ticker/currentPrice`
+- **Path Parameter**: `ticker` - Ticker symbol .e.g ETHUSD
+- **Response Body**: JSON object with the `currentPrice` field.
+    ```json
+    {
+        "currentPrice": 999.3999999999999
+    }
+    ```
+
+### 6. Get Best Ask Price
+
+- **HTTP Method**: GET
+- **Path**: `/book/:ticker/bestAsk`
+- **Path Parameter**: `ticker` - Ticker symbol .e.g ETHUSD
+- **Response Body**: JSON object with the `bestAskPrice` field.
+    ```json
+    {
+        "bestAskPrice": 999.3999999999999
+    }
+    ```
+
+### 7. Get Best Bid Price
+
+- **HTTP Method**: GET
+- **Path**: `/book/:ticker/bestBid`
+- **Path Parameter**: `ticker` - Ticker symbol
+- **Response Body**: JSON object with the `bestBidPrice` field.
+    ```json
+    {
+        "bestBidPrice": 999.3999999999999
+    }
+    ```
+
+### 8. Cancel Order
+
+- **HTTP Method**: DELETE
+- **Path**: `/order/:ticker/:id`
+- **Path Parameters**:
+  - `ticker` - Ticker symbol .e.g. ETHUSD
+  - `id` - Order ID
+- **Response Body**: JSON object with `msg` field.
+    ```json
+    {
+    "msg": "order cancelled"
+    }
+    ```
+
+## WebSocket APIs
+
+### 1. Current Price
+
+- **Path**: `/ws/currentPrice`
+- **Data**: Current price is sent to the connected client.
+    ```json
+    {
+        "currentPrice": 999.3999999999999
+    }
+    ```
+
+### 2. Last Trades
+
+- **Path**: `/ws/lastTrades`
+- **Data**: Last 15 trades are sent to the connected client.
+    ```json
+    [
+        {
+            "Price": 999.3999999999999,
+            "Size": 1,
+            "IsBuyerMaker": false,
+            "Timestamp": 1696370597675928000
+        },
+    ]
+    ```
+
+### 3. Best Sells
+
+- **Path**: `/ws/bestSells`
+- **Data**: Best 15 sell limits are sent to the connected client.
+    ```json
+    [
+    {
+        "Price": 999.3999999999999,
+        "Volume": 1060
+    }
+    ]
+    ```
+
+### 4. Best Buys
+
+- **Path**: `/ws/bestBuys`
+- **Data**: Best 15 buy limits are sent to the connected client.
+    ```json
+    [
+    {
+        "Price": 999.3999999999999,
+        "Volume": 1060
+    }
+    ]
+    ```

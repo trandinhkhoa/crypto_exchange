@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 // TODO: user need crypto wallet
@@ -67,7 +69,7 @@ func NewOrder(
 }
 
 // implement Stringer interface
-func (o *Order) String() string {
+func (o Order) String() string {
 	return fmt.Sprintf("{\"id\": %d, \"userId\": \"%s\", \"isBid\": %t, \"orderType\": \"%s\", \"size\": %.2f, \"limitPrice\": %.2f, \"timestamp\": %d }",
 		o.id,
 		o.userId,
@@ -78,17 +80,18 @@ func (o *Order) String() string {
 		o.timestamp)
 }
 
-func (o1 *Order) IsBetter(o2 *Order) bool {
+func (o1 Order) IsBetter(o2 Order) bool {
 	if o1.isBid && o2.isBid {
 		return o1.limitPrice > o2.limitPrice
 	} else if !o1.isBid && !o2.isBid {
 		return o1.limitPrice < o2.limitPrice
 	} else {
-		// TODO: throw error if not bid-bid/ask-ask
-		panic("Cant compare if not bid-bid/ask-ask")
+		logrus.Warn("Cant compare if not bid-bid/ask-ask")
+		return false
 	}
 }
-func (o *Order) IsFilled() bool {
+
+func (o Order) IsFilled() bool {
 	return o.Size == float64(0)
 }
 

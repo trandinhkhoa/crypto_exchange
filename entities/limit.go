@@ -38,7 +38,7 @@ func NewLimit(limitPrice float64) *Limit {
 	}
 }
 
-func (l *Limit) GetLimitPrice() float64 {
+func (l Limit) GetLimitPrice() float64 {
 	return l.limitPrice
 }
 

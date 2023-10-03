@@ -339,7 +339,7 @@ func travelLimitTreeAndAddOrderToLimit(node *Limit, incomingOrder *Order) *Limit
 	if incomingOrder.GetLimitPrice() == node.headOrder.GetLimitPrice() {
 		node.AddOrder(incomingOrder)
 		return nil
-	} else if incomingOrder.IsBetter(node.headOrder) {
+	} else if incomingOrder.IsBetter(*node.headOrder) {
 		if node.leftChild != nil {
 			return travelLimitTreeAndAddOrderToLimit(node.leftChild, incomingOrder)
 		} else {
