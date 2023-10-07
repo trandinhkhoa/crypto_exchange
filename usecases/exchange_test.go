@@ -7,6 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/trandinhkhoa/crypto-exchange/entities"
+	"github.com/trandinhkhoa/crypto-exchange/server"
 	"github.com/trandinhkhoa/crypto-exchange/usecases"
 )
 
@@ -19,6 +20,11 @@ func TestMain(m *testing.M) {
 }
 func TestPlaceLimitOrderExchange(t *testing.T) {
 	ex := usecases.NewExchange()
+	// TODO: not pretty but i dont think the dependency rule is violated here. As package `usecases_test` is not really inside package `server`
+	ordersRepoImpl := server.OrdersRepoImpl{}
+	ex.OrdersRepo = ordersRepoImpl
+	usersRepoImpl := server.UsersRepoImpl{}
+	ex.UsersRepo = usersRepoImpl
 
 	ex.RegisterUserWithBalance("john",
 		map[string]float64{
@@ -96,6 +102,11 @@ func TestPlaceLimitOrderExchange(t *testing.T) {
 
 func TestCancelOrderExchange(t *testing.T) {
 	ex := usecases.NewExchange()
+	// TODO: not pretty but i dont think the dependency rule is violated here. As package `usecases_test` is not really inside package `server`
+	ordersRepoImpl := server.OrdersRepoImpl{}
+	ex.OrdersRepo = ordersRepoImpl
+	usersRepoImpl := server.UsersRepoImpl{}
+	ex.UsersRepo = usersRepoImpl
 
 	ex.RegisterUserWithBalance("john",
 		map[string]float64{

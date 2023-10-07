@@ -35,6 +35,13 @@ func TestServerHandlePlaceOrder(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	ex := usecases.NewExchange()
+
+	// injections of implementations
+	ordersRepoImpl := server.OrdersRepoImpl{}
+	ex.OrdersRepo = ordersRepoImpl
+	usersRepoImpl := server.UsersRepoImpl{}
+	ex.UsersRepo = usersRepoImpl
+
 	ex.RegisterUserWithBalance("jane",
 		map[string]float64{
 			"ETH": 2000.0,

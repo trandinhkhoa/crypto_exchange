@@ -17,6 +17,11 @@ type Exchange struct {
 	usersMap      map[string]*entities.User
 	orderbooksMap map[Ticker]*entities.Orderbook
 	mu            sync.Mutex
+
+	// uppercase for now for quick injection
+	// TODO: pass these as constructor args ??
+	UsersRepo  UsersRepository
+	OrdersRepo OrdersRepository
 }
 
 func NewExchange() *Exchange {
@@ -80,6 +85,8 @@ func (ex *Exchange) PlaceLimitOrder(o entities.Order) {
 	}
 
 	ex.orderbooksMap[ticker].PlaceLimitOrder(o)
+
+	ex.persistAfterLimitOrder(o)
 }
 
 func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
@@ -114,6 +121,9 @@ func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
 			"trade": trade,
 		}).Info("Order Executed")
 	}
+
+	ex.persistAfterMarketOrder(tradesArray)
+
 	return tradesArray
 }
 
@@ -166,5 +176,46 @@ func (ex *Exchange) CancelOrder(orderId int64, ticker string) {
 		user.Balance[ticker2] += size * price
 	} else {
 		user.Balance[ticker1] += size
+	}
+}
+
+type UserRepositoryImpl struct {
+}
+
+func (userRepo UserRepositoryImpl) Update() {
+
+}
+
+func (ex Exchange) persistAfterLimitOrder(order entities.Order) {
+	// persist users balance
+	ex.UsersRepo.Update(ex.GetUsersMap()[order.GetUserId()])
+	// PlaceLimitOrder only adds for now so persist the creation
+	ex.OrdersRepo.Create(order)
+}
+
+func (ex Exchange) persistAfterMarketOrder(tradesArray []entities.Trade) {
+	for _, trade := range tradesArray {
+		buyer := trade.GetBuyer()
+		seller := trade.GetSeller()
+
+		// persist users balance
+		ex.UsersRepo.Update(ex.GetUsersMap()[buyer.GetUserId()])
+		ex.UsersRepo.Update(ex.GetUsersMap()[seller.GetUserId()])
+
+		ticker := Ticker(trade.GetBuyer().GetTicker())
+		// order does not exist == deleted => persist the deletion else persist current state
+		_, err := ex.orderbooksMap[ticker].GetOrderbyId(trade.GetBuyer().GetId())
+		if err != nil {
+			ex.OrdersRepo.Delete(trade.GetBuyer())
+		} else {
+			ex.OrdersRepo.Update(trade.GetBuyer())
+		}
+
+		_, err = ex.orderbooksMap[ticker].GetOrderbyId(trade.GetSeller().GetId())
+		if err != nil {
+			ex.OrdersRepo.Delete(trade.GetSeller())
+		} else {
+			ex.OrdersRepo.Update(trade.GetSeller())
+		}
 	}
 }

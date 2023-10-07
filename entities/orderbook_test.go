@@ -309,10 +309,22 @@ func TestCancelOrderSimple(t *testing.T) {
 	incomingOrder := entities.NewOrder("john", "ticker", true, entities.LimitOrderType, 1, 1000)
 	ob.PlaceLimitOrder(*incomingOrder)
 
+	order, err := ob.GetOrderbyId(incomingOrder.GetId())
+	if assert.NoError(t, err) {
+		assert.Equal(t, incomingOrder.GetId(), order.GetId())
+		assert.Equal(t, incomingOrder.GetLimitPrice(), order.GetLimitPrice())
+		assert.Equal(t, incomingOrder.GetSize(), order.GetSize())
+		assert.Equal(t, incomingOrder.GetTimeStamp(), order.GetTimeStamp())
+		assert.Equal(t, incomingOrder.GetUserId(), order.GetUserId())
+		assert.Equal(t, incomingOrder.GetOrderType(), order.GetOrderType())
+	}
 	assert.Equal(t, 1.0, ob.GetTotalVolumeAllBuys(), 1.0)
 	assert.Equal(t, 1000.0, ob.HighestBuy.GetLimitPrice())
 
 	ob.CancelOrder(incomingOrder.GetId())
+
+	_, err = ob.GetOrderbyId(incomingOrder.GetId())
+	assert.Error(t, err)
 
 	assert.Equal(t, 0.0, ob.GetTotalVolumeAllBuys())
 	assert.True(t, ob.HighestBuy == nil)

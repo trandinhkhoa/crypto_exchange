@@ -383,6 +383,12 @@ func StartServer() {
 	handler := WebServiceHandler{}
 	ex := usecases.NewExchange()
 
+	// injections of implementations
+	ordersRepoImpl := OrdersRepoImpl{}
+	ex.OrdersRepo = ordersRepoImpl
+	usersRepoImpl := UsersRepoImpl{}
+	ex.UsersRepo = usersRepoImpl
+
 	handler.ex = ex
 
 	handler.ex.RegisterUserWithBalance("maker123",

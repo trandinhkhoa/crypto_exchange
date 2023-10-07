@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -357,5 +358,14 @@ func travelLimitTreeAndAddOrderToLimit(node *Limit, incomingOrder *Order) *Limit
 			newLimit.parent = node
 			return newLimit
 		}
+	}
+}
+
+func (ob Orderbook) GetOrderbyId(id int64) (Order, error) {
+	order, ok := ob.idToOrderMap[id]
+	if !ok {
+		return Order{}, errors.New("Order does not exist")
+	} else {
+		return *order, nil
 	}
 }
