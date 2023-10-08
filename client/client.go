@@ -13,17 +13,17 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/trandinhkhoa/crypto-exchange/server"
+	"github.com/trandinhkhoa/crypto-exchange/controllers"
 )
 
 const exchangeentities = "http://localhost:3000"
 
 type PlaceLimitOrderResponseBody struct {
 	Msg   string
-	Order server.OrderResponse
+	Order controllers.OrderResponse
 }
 type PlaceMarketOrderResponseBody struct {
-	Matches []server.TradeResponse
+	Matches []controllers.TradeResponse
 }
 
 type CurrentPriceResponseBody struct {
@@ -103,7 +103,7 @@ func PlaceLimitFromFile() {
 		size, _ := strconv.ParseFloat(record[3], 64)
 		isBid := record[1] == "a"
 
-		order := server.PlaceOrderRequest{
+		order := controllers.PlaceOrderRequest{
 			UserId:    "maker123",
 			OrderType: "LIMIT",
 			IsBid:     isBid,
@@ -135,7 +135,7 @@ func MakeMarket() {
 		askPrice := lastTradedPrice + halfSpread
 
 		// Place bid order
-		bidBody := server.PlaceOrderRequest{
+		bidBody := controllers.PlaceOrderRequest{
 			UserId:    "maker123",
 			OrderType: "LIMIT",
 			IsBid:     true,
@@ -146,7 +146,7 @@ func MakeMarket() {
 		PlaceOrder(bidBody)
 
 		// Place ask order
-		askBody := server.PlaceOrderRequest{
+		askBody := controllers.PlaceOrderRequest{
 			UserId:    "maker123",
 			OrderType: "LIMIT",
 			IsBid:     false,
@@ -158,7 +158,7 @@ func MakeMarket() {
 	}
 }
 
-func PlaceOrder(order server.PlaceOrderRequest) error {
+func PlaceOrder(order controllers.PlaceOrderRequest) error {
 	url := exchangeentities + "/order"
 	orderBody, err := json.Marshal(order)
 	if err != nil {
@@ -218,7 +218,7 @@ func PlaceMarketRepeat() {
 			}
 		}
 
-		orderBody := server.PlaceOrderRequest{
+		orderBody := controllers.PlaceOrderRequest{
 			UserId:    "traderJoe123",
 			OrderType: "MARKET",
 			IsBid:     isBid,

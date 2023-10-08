@@ -1,10 +1,6 @@
-package server
+package controllers
 
 import (
-	"database/sql"
-
-	_ "github.com/mattn/go-sqlite3"
-
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -57,12 +53,12 @@ type PlaceOrderRequest struct {
 }
 
 type WebServiceHandler struct {
-	ex *usecases.Exchange
+	Ex *usecases.Exchange
 }
 
 func NewWebServiceHandler(ex *usecases.Exchange) *WebServiceHandler {
 	handler := WebServiceHandler{}
-	handler.ex = ex
+	handler.Ex = ex
 	return &handler
 }
 
@@ -82,14 +78,14 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 	)
 
 	// TODO: check if userid exist
-	_, ok := handler.ex.GetUsersMap()[placeOrderData.UserId]
+	_, ok := handler.Ex.GetUsersMap()[placeOrderData.UserId]
 	if !ok {
 		msg := fmt.Sprintf("userId %s does not exist", placeOrderData.UserId)
 		return c.JSON(400, map[string]interface{}{"msg": msg})
 	}
 
 	if placeOrderData.OrderType == entities.MarketOrderType {
-		trades := handler.ex.PlaceMarketOrder(*incomingOrder)
+		trades := handler.Ex.PlaceMarketOrder(*incomingOrder)
 		tradesDataArray := make([]TradeResponse, 0)
 		for _, trade := range trades {
 			tradeData := &TradeResponse{
@@ -102,7 +98,7 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 		}
 		return c.JSON(200, map[string]interface{}{"matches": tradesDataArray})
 	} else {
-		handler.ex.PlaceLimitOrder(*incomingOrder)
+		handler.Ex.PlaceLimitOrder(*incomingOrder)
 		return c.JSON(200, map[string]interface{}{
 			"msg": "limit order placed",
 			"order": OrderResponse{
@@ -127,7 +123,7 @@ func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
 		Bids:            make([]*OrderResponse, 0),
 	}
 
-	buybook, bVolume, sellbook, sVolume := handler.ex.GetBook(string(ticker))
+	buybook, bVolume, sellbook, sVolume := handler.Ex.GetBook(string(ticker))
 	for _, limit := range buybook {
 		ordersList := limit.GetAllOrders()
 		for _, order := range ordersList {
@@ -162,7 +158,7 @@ func (handler WebServiceHandler) HandleGetBook(c echo.Context) error {
 
 func (handler WebServiceHandler) HandleGetCurrentPrice(c echo.Context) error {
 	ticker := c.Param("ticker")
-	lastTrades := handler.ex.GetLastTrades(ticker, 1)
+	lastTrades := handler.Ex.GetLastTrades(ticker, 1)
 	if len(lastTrades) == 0 {
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"msg": "no trades yet",
@@ -176,7 +172,7 @@ func (handler WebServiceHandler) HandleGetCurrentPrice(c echo.Context) error {
 
 func (handler WebServiceHandler) HandleGetBestAsk(c echo.Context) error {
 	ticker := c.Param("ticker")
-	bestAskPrice := handler.ex.GetBestSell(ticker)
+	bestAskPrice := handler.Ex.GetBestSell(ticker)
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"bestAskPrice": bestAskPrice,
 	})
@@ -184,7 +180,7 @@ func (handler WebServiceHandler) HandleGetBestAsk(c echo.Context) error {
 
 func (handler WebServiceHandler) HandleGetBestBid(c echo.Context) error {
 	ticker := c.Param("ticker")
-	bestBidPrice := handler.ex.GetBestBuy(ticker)
+	bestBidPrice := handler.Ex.GetBestBuy(ticker)
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"bestBidPrice": bestBidPrice,
 	})
@@ -198,16 +194,10 @@ func (handler WebServiceHandler) HandleCancelOrder(c echo.Context) error {
 		})
 	}
 	ticker := c.Param("ticker")
-	handler.ex.CancelOrder(int64(orderId), ticker)
+	handler.Ex.CancelOrder(int64(orderId), ticker)
 	return c.JSON(200, map[string]interface{}{
 		"msg": "order cancelled",
 	})
-}
-
-// TODO: dont always return 400
-func httpErrorHandler(err error, c echo.Context) {
-	fmt.Println(err)
-	c.JSON(http.StatusBadRequest, err)
 }
 
 // this function is called everytime a client connect to the websocket
@@ -218,11 +208,10 @@ func (handler WebServiceHandler) WebSocketHandlerCurrentPrice(ws *websocket.Conn
 	currentPrice := lastCurrentPrice
 
 	for {
-		// reading a field (float64) instead of slice as a dirty work around for the issue described below
-		// still racy but float64 will hide the issue
-		// with a slice, it's more obvious. because i might be reading a newly allocated entry that has not been filled yet
+		// NOTE: reading the last value of the slice orderbook.lastTrades introduce race condition.
+		// because i might be reading an   entry that has just been allocated by the other goroutine for orderprocessing and the it has yet to be filled
 		// TODO: use channel
-		currentPrice = handler.ex.GetLastPrice(ticker)
+		currentPrice = handler.Ex.GetLastPrice(ticker)
 		if currentPrice != lastCurrentPrice {
 			lastCurrentPrice = currentPrice
 			msg := fmt.Sprint(currentPrice)
@@ -236,14 +225,6 @@ func (handler WebServiceHandler) WebSocketHandlerCurrentPrice(ws *websocket.Conn
 				}).Info("Sent to client")
 			}
 		}
-		// TODO: w/o sleep -> currentPrice == 0/weird value. The book might be queried too fast and even when it is empty ???
-		// when this happen , the orderbook is not empty, lastTrades is not empty either, lastTrades when debugged even show the correct value
-		// w/o low sleep time (100 ns) the issue is also more prevalent if i increase the number of socket listeners (1 listener ok, 3 listener not ok)
-		// another dirty "workaround" , faster market maker ?? -> No --> the issue only happen when this function is called
-		// even after creating a function that return  float64as the last price did not help
-		// this function is being ran concurrently (each HTTP request has its own goroutine )
-		//, it might trigger read access to trades[] at the same time trades is being written into , hence the weird value
-		// time.Sleep(100 * time.Nanosecond)
 	}
 }
 
@@ -251,7 +232,7 @@ func (handler WebServiceHandler) WebSocketHandlerLastTrade(ws *websocket.Conn) {
 	ticker := "ETHUSD"
 
 	for {
-		arr := handler.ex.GetLastTrades(ticker, 15)
+		arr := handler.Ex.GetLastTrades(ticker, 15)
 		responsesArr := make([]TradeResponse, 0)
 		for _, trade := range arr {
 			response := TradeResponse{
@@ -277,7 +258,7 @@ func (handler WebServiceHandler) WebSocketHandlerBestBuys(ws *websocket.Conn) {
 	ticker := "ETHUSD"
 
 	for {
-		arr := handler.ex.GetBestBuys(ticker, 15)
+		arr := handler.Ex.GetBestBuys(ticker, 15)
 		responsesArr := make([]LimitResponse, 0)
 		for _, limit := range arr {
 			response := LimitResponse{
@@ -301,7 +282,7 @@ func (handler WebServiceHandler) WebSocketHandlerBestSells(ws *websocket.Conn) {
 	ticker := "ETHUSD"
 
 	for {
-		arr := handler.ex.GetBestSells(ticker, 15)
+		arr := handler.Ex.GetBestSells(ticker, 15)
 		responsesArr := make([]LimitResponse, 0)
 		for _, limit := range arr {
 			response := LimitResponse{
@@ -328,132 +309,15 @@ func (handler WebServiceHandler) registerUser(c echo.Context) {
 // TODO: dont return all details about users ?
 // or maybe check the right of the requester
 func (handler WebServiceHandler) HandleGetUsers(c echo.Context) error {
-	return c.JSON(200, handler.ex.GetUsersMap())
+	return c.JSON(200, handler.Ex.GetUsersMap())
 }
 
 // TODO: dont return all details about users ?
 func (handler WebServiceHandler) HandleGetUser(c echo.Context) error {
 	userId := c.Param("userId")
-	user, ok := handler.ex.GetUsersMap()[userId]
+	user, ok := handler.Ex.GetUsersMap()[userId]
 	if !ok {
 		return c.JSON(404, fmt.Sprintf("UserId %s does not exist", userId))
 	}
 	return c.JSON(200, user)
-}
-
-func SetupDatabase(dbLocation string) *sql.DB {
-	// Open SQLite database
-	db, err := sql.Open("sqlite3", dbLocation)
-	if err != nil {
-		logrus.Fatal("Unable to open database", err)
-		// TODO: how to write defer only once for all err
-		defer db.Close()
-	}
-
-	// Create table
-	// TODO: avoid hardcoding all currencies
-	createTableSQL := `CREATE TABLE IF NOT EXISTS users (
-		"userid" TEXT PRIMARY KEY,
-		"ETH" FLOAT,
-		"USD" FLOAT
-	);`
-	_, err = db.Exec(createTableSQL)
-	if err != nil {
-		logrus.Fatal("Unable to create table", err)
-		defer db.Close()
-	}
-
-	createTableSQL = `CREATE TABLE IF NOT EXISTS buyOrders (
-		"id" INTEGER PRIMARY KEY,
-		"userid" TEXT,
-		"size" INTEGER,
-		"price" INTEGER,
-		"timestamp" INTEGER
-	);`
-
-	_, err = db.Exec(createTableSQL)
-	if err != nil {
-		logrus.Fatal("Unable to create table", err)
-		defer db.Close()
-	}
-
-	createTableSQL = `CREATE TABLE IF NOT EXISTS sellOrders (
-		"id" INTEGER PRIMARY KEY,
-		"userid" TEXT,
-		"size" INTEGER,
-		"price" INTEGER,
-		"timestamp" INTEGER
-	);`
-
-	_, err = db.Exec(createTableSQL)
-	if err != nil {
-		logrus.Fatal("Unable to create table", err)
-		defer db.Close()
-	}
-
-	logrus.Info("Connected to the database")
-	return db
-}
-
-// TODO: this is infrastructure code. need to separate it from the controller above
-func StartServer() {
-	e := echo.New()
-
-	e.HTTPErrorHandler = httpErrorHandler
-	// client, err := ethclient.Dial("http://localhost:8545")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	dbHandler := SetupDatabase("./real.db")
-	defer dbHandler.Close()
-	handler := WebServiceHandler{}
-	ex := usecases.NewExchange()
-
-	// injections of implementations
-	ordersRepoImpl := NewOrdersRepoImpl(dbHandler)
-	ex.OrdersRepo = ordersRepoImpl
-	usersRepoImpl := NewUsersRepoImpl(dbHandler)
-	ex.UsersRepo = usersRepoImpl
-
-	handler.ex = ex
-
-	handler.ex.RegisterUserWithBalance("maker123",
-		map[string]float64{
-			"ETH": 10000.0,
-			"USD": 1000000.0,
-		},
-	)
-	handler.ex.RegisterUserWithBalance("traderJoe123",
-		map[string]float64{
-			"ETH": 10.0,
-			"USD": 1000.0,
-		},
-	)
-	handler.ex.RegisterUserWithBalance("me",
-		map[string]float64{
-			"ETH": 0.0,
-			"USD": 1000.0,
-		},
-	)
-
-	e.POST("/order", handler.HandlePlaceOrder)
-
-	e.GET("/users", handler.HandleGetUsers)
-	e.GET("/users/:userId", handler.HandleGetUser)
-	e.GET("/book/:ticker", handler.HandleGetBook)
-	// TODO: handle error when ticker does not exist
-	e.GET("/book/:ticker/currentPrice", handler.HandleGetCurrentPrice)
-	// TODO: handle error when this is called while no bid/ask is in the book
-	e.GET("/book/:ticker/bestAsk", handler.HandleGetBestAsk)
-	e.GET("/book/:ticker/bestBid", handler.HandleGetBestBid)
-
-	e.DELETE("/order/:ticker/:id", handler.HandleCancelOrder)
-
-	e.GET("/ws/currentPrice", echo.WrapHandler(websocket.Handler(handler.WebSocketHandlerCurrentPrice)))
-	e.GET("/ws/lastTrades", echo.WrapHandler(websocket.Handler(handler.WebSocketHandlerLastTrade)))
-	e.GET("/ws/bestSells", echo.WrapHandler(websocket.Handler(handler.WebSocketHandlerBestSells)))
-	e.GET("/ws/bestBuys", echo.WrapHandler(websocket.Handler(handler.WebSocketHandlerBestBuys)))
-
-	e.Start(":3000")
 }

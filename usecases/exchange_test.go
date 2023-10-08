@@ -1,13 +1,16 @@
 package usecases_test
 
 import (
+	"database/sql"
 	"io"
+	"os"
 	"testing"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/trandinhkhoa/crypto-exchange/controllers"
 	"github.com/trandinhkhoa/crypto-exchange/entities"
-	"github.com/trandinhkhoa/crypto-exchange/server"
+	"github.com/trandinhkhoa/crypto-exchange/infrastructure"
 	"github.com/trandinhkhoa/crypto-exchange/usecases"
 )
 
@@ -15,23 +18,71 @@ import (
 // It is also sometimes necessary to control which code runs on the main thread.
 var ex *usecases.Exchange
 
-func TestMain(m *testing.M) {
+func setup() (string, *sql.DB) {
 
 	ex = usecases.NewExchange()
 	// TODO: not pretty but i dont think the dependency rule is violated here. As package `usecases_test` is not really inside package `server`
-	dbHandler := server.SetupDatabase("./test.db")
+	filePath := "./test.db"
+	if _, err := os.Stat(filePath); err == nil {
+		// File exists, proceed to delete
+		err := os.Remove(filePath)
+		if err != nil {
+			logrus.Error("Error cleaning up test db: ", err)
+			return filePath, nil
+		}
+	} else if os.IsNotExist(err) {
+		// File does not exist, do nothing
+		logrus.Info("File does not exist, skipping")
+	} else {
+		// Some other error occurred
+		logrus.Error("Error cleaning up test db: ", err)
+		return filePath, nil
+	}
+	dbHandler := infrastructure.SetupDatabase("./test.db")
 	// injections of implementations
-	ordersRepoImpl := server.NewOrdersRepoImpl(dbHandler)
+	ordersRepoImpl := controllers.NewOrdersRepoImpl(dbHandler)
 	ex.OrdersRepo = ordersRepoImpl
-	usersRepoImpl := server.NewUsersRepoImpl(dbHandler)
+	usersRepoImpl := controllers.NewUsersRepoImpl(dbHandler)
 	ex.UsersRepo = usersRepoImpl
-
-	// Disable logrus in tests
 	logrus.SetOutput(io.Discard)
-	m.Run()
+
+	return filePath, dbHandler
+}
+
+func teardown(filePath string, dbHandler *sql.DB) {
+	//tear down
+	dbHandler.Close()
+	if _, err := os.Stat(filePath); err == nil {
+		// File exists, proceed to delete
+		err := os.Remove(filePath)
+		if err != nil {
+			logrus.Error("Error cleaning up test db: ", err)
+			return
+		}
+	} else if os.IsNotExist(err) {
+		// File does not exist, do nothing
+		logrus.Error("File does not exist, skipping")
+	} else {
+		// Some other error occurred
+		logrus.Error("Error cleaning up test db: ", err)
+		return
+	}
+}
+
+func setupTest() func() {
+	// Setup code here
+	filePath, dbHandler := setup()
+
+	// tear down later
+	return func() {
+		teardown(filePath, dbHandler)
+		// tear-down code here
+	}
 }
 
 func TestPlaceLimitOrderExchange(t *testing.T) {
+	defer setupTest()()
+
 	ex.RegisterUserWithBalance("john",
 		map[string]float64{
 			"ETH": 2000.0,
@@ -107,7 +158,7 @@ func TestPlaceLimitOrderExchange(t *testing.T) {
 }
 
 func TestCancelOrderExchange(t *testing.T) {
-	// TODO: not pretty but i dont think the dependency rule is violated here. As package `usecases_test` is not really inside package `server`
+	defer setupTest()()
 
 	ex.RegisterUserWithBalance("john",
 		map[string]float64{

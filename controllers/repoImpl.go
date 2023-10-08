@@ -1,4 +1,4 @@
-package server
+package controllers
 
 import (
 	"database/sql"
@@ -8,13 +8,18 @@ import (
 	"github.com/trandinhkhoa/crypto-exchange/entities"
 )
 
-type OrdersRepoImpl struct {
-	dbHandler *sql.DB
+type SqlDbHandler interface {
+	Exec(string) error
+	// Query(string)
 }
 
-func NewOrdersRepoImpl(dbHandler *sql.DB) *OrdersRepoImpl {
+type OrdersRepoImpl struct {
+	sqliteHandler *sql.DB
+}
+
+func NewOrdersRepoImpl(sqliteHandler *sql.DB) *OrdersRepoImpl {
 	return &OrdersRepoImpl{
-		dbHandler: dbHandler,
+		sqliteHandler: sqliteHandler,
 	}
 }
 
@@ -41,8 +46,7 @@ func (ordersRepoImpl OrdersRepoImpl) Create(order entities.Order) {
 		order.GetId(), order.GetUserId(), order.GetSize(), order.GetLimitPrice(), order.GetTimeStamp(),
 	)
 
-	_, err := ordersRepoImpl.dbHandler.Exec(queryStr)
-	if err != nil {
+	if err := ordersRepoImpl.sqliteHandler.Exec(queryStr); err != nil {
 		logrus.Fatal("Unable to create order: ", err)
 	}
 }
@@ -59,7 +63,7 @@ func (ordersRepoImpl OrdersRepoImpl) Update(order entities.Order) {
 		size, order.GetSize(),
 		id, order.GetId())
 
-	_, err := ordersRepoImpl.dbHandler.Exec(queryStr)
+	_, err := ordersRepoImpl.sqliteHandler.Exec(queryStr)
 	if err != nil {
 		logrus.Fatal("Unable to update order: ", err)
 	}
@@ -76,7 +80,7 @@ func (ordersRepoImpl OrdersRepoImpl) Delete(order entities.Order) {
 		tableName,
 		id, order.GetId())
 
-	_, err := ordersRepoImpl.dbHandler.Exec(queryStr)
+	_, err := ordersRepoImpl.sqliteHandler.Exec(queryStr)
 	if err != nil {
 		logrus.Fatal("Unable to delete order: ", err)
 	}
