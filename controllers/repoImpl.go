@@ -9,7 +9,11 @@ import (
 type SqlDbHandler interface {
 	Exec(string) error
 	Close()
-	// Query(string)
+	Query(string) Row
+}
+type Row interface {
+	Scan(dest ...interface{})
+	Next() bool
 }
 
 type OrdersRepoImpl struct {
@@ -77,6 +81,38 @@ func (ordersRepoImpl OrdersRepoImpl) Delete(order entities.Order) {
 	ordersRepoImpl.sqlDbHandler.Exec(queryStr)
 }
 
+func (ordersRepoImpl OrdersRepoImpl) ReadAll(side string) []entities.Order {
+	var tableName string
+	var isBid bool
+	if side == "buy" {
+		tableName = "buyOrders"
+		isBid = true
+	} else {
+		tableName = "sellOrders"
+		isBid = false
+	}
+
+	queryStr := fmt.Sprintf("SELECT * FROM %s", tableName)
+
+	ordersRepoImpl.sqlDbHandler.Exec(queryStr)
+	rows := ordersRepoImpl.sqlDbHandler.Query(queryStr)
+
+	buyOrders := make([]entities.Order, 0)
+	for rows.Next() {
+		// TODO: put this somewhere else ??
+		var id int64
+		var userId string
+		var size float64
+		var price float64
+		var timestamp int64
+		rows.Scan(&id, &userId, &size, &price, &timestamp)
+		order := entities.NewOrder(userId, "ETHUSD", isBid, entities.LimitOrderType, size, price)
+		buyOrders = append(buyOrders, *order)
+	}
+
+	return buyOrders
+}
+
 type UsersRepoImpl struct {
 	sqlDbHandler SqlDbHandler
 }
@@ -106,4 +142,29 @@ func (usersRepoImpl UsersRepoImpl) Update(user entities.User) {
 		userid, user.GetUserId())
 
 	usersRepoImpl.sqlDbHandler.Exec(queryStr)
+}
+
+func (userRepoImpl UsersRepoImpl) ReadAll() []entities.User {
+	tableName := "users"
+
+	queryStr := fmt.Sprintf("SELECT * FROM %s", tableName)
+
+	userRepoImpl.sqlDbHandler.Exec(queryStr)
+	rows := userRepoImpl.sqlDbHandler.Query(queryStr)
+
+	usersList := make([]entities.User, 0)
+	for rows.Next() {
+		// TODO: put this somewhere else ??
+		var userId string
+		var ethBalance float64
+		var usdBalance float64
+		rows.Scan(&userId, &ethBalance, &usdBalance)
+		user := entities.NewUser(userId, map[string]float64{
+			"ETH": ethBalance,
+			"USD": usdBalance,
+		})
+		usersList = append(usersList, *user)
+	}
+
+	return usersList
 }

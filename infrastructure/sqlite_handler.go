@@ -6,6 +6,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
+	"github.com/trandinhkhoa/crypto-exchange/controllers"
 )
 
 type SqliteDbHandler struct {
@@ -52,4 +53,31 @@ func (sqlDbHandler *SqliteDbHandler) Exec(statement string) error {
 
 func (sqlDbHandler *SqliteDbHandler) Close() {
 	sqlDbHandler.dbConn.Close()
+}
+
+type SqliteRow struct {
+	Rows *sql.Rows
+}
+
+func (r SqliteRow) Scan(dest ...interface{}) {
+	if err := r.Rows.Scan(dest...); err != nil {
+		logrus.Error(err)
+	}
+}
+
+func (r SqliteRow) Next() bool {
+	return r.Rows.Next()
+}
+
+func (sqlDbHandler *SqliteDbHandler) Query(statement string) controllers.Row {
+	// Step 2: Execute SQL SELECT query
+	rows, err := sqlDbHandler.dbConn.Query(statement)
+	if err != nil {
+		logrus.Error(err)
+		return new(SqliteRow)
+	}
+	defer rows.Close()
+	row := new(SqliteRow)
+	row.Rows = rows
+	return row
 }

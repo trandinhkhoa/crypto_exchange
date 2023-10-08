@@ -98,7 +98,7 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 		}
 		return c.JSON(200, map[string]interface{}{"matches": tradesDataArray})
 	} else {
-		handler.Ex.PlaceLimitOrder(*incomingOrder)
+		handler.Ex.PlaceLimitOrderAndPersist(*incomingOrder)
 		return c.JSON(200, map[string]interface{}{
 			"msg": "limit order placed",
 			"order": OrderResponse{

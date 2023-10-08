@@ -145,6 +145,7 @@ func (client Client) MakeMarket() {
 	for {
 		<-ticker.C
 
+		fmt.Println("MAKEING")
 		lastTradedPrice, err := client.GetCurrentPrice()
 		if err != nil || lastTradedPrice == 0 {
 			lastTradedPrice = simulateFetchPriceFromOtherExchange()

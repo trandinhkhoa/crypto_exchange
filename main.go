@@ -104,6 +104,8 @@ func StartServer(freshstart bool, port int) {
 	if freshstart {
 		initialTablesSetup(dbHandler)
 		createSomeUsers(&apiHandler)
+	} else {
+		ex.Recover()
 	}
 
 	e.POST("/order", apiHandler.HandlePlaceOrder)

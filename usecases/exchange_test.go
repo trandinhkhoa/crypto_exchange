@@ -99,23 +99,23 @@ func TestPlaceLimitOrderExchange(t *testing.T) {
 
 	// 1000(*)
 	incomingOrder := entities.NewOrder("john", "ETHUSD", false, entities.LimitOrderType, 1, 100)
-	ex.PlaceLimitOrder(*incomingOrder)
+	ex.PlaceLimitOrderAndPersist(*incomingOrder)
 
 	// 900 < 1000(*)
 	incomingOrder = entities.NewOrder("jim", "ETHUSD", false, entities.LimitOrderType, 1, 90)
-	ex.PlaceLimitOrder(*incomingOrder)
+	ex.PlaceLimitOrderAndPersist(*incomingOrder)
 
 	// 900 < 1000(*) < 1100
 	incomingOrder = entities.NewOrder("jane", "ETHUSD", false, entities.LimitOrderType, 4, 110)
-	ex.PlaceLimitOrder(*incomingOrder)
+	ex.PlaceLimitOrderAndPersist(*incomingOrder)
 
 	// 900 < 1000(*) < 1005 < 1100
 	incomingOrder = entities.NewOrder("jun", "ETHUSD", false, entities.LimitOrderType, 9, 105)
-	ex.PlaceLimitOrder(*incomingOrder)
+	ex.PlaceLimitOrderAndPersist(*incomingOrder)
 
 	// 900 < 1000(*) < 1005[2] < 1100
 	incomingOrder = entities.NewOrder("jack", "ETHUSD", false, entities.LimitOrderType, 9, 105)
-	ex.PlaceLimitOrder(*incomingOrder)
+	ex.PlaceLimitOrderAndPersist(*incomingOrder)
 
 	incomingOrder = entities.NewOrder("lily", "ETHUSD", true, entities.MarketOrderType, 1, 0)
 	ex.PlaceMarketOrder(*incomingOrder)
@@ -179,19 +179,19 @@ func TestCancelOrderExchange(t *testing.T) {
 	// R--- 1005
 	//     R--- 1100
 	johnOrder := entities.NewOrder("john", "ETHUSD", false, entities.LimitOrderType, 1, 100)
-	ex.PlaceLimitOrder(*johnOrder)
+	ex.PlaceLimitOrderAndPersist(*johnOrder)
 
 	jimOrder := entities.NewOrder("jim", "ETHUSD", false, entities.LimitOrderType, 1, 90)
-	ex.PlaceLimitOrder(*jimOrder)
+	ex.PlaceLimitOrderAndPersist(*jimOrder)
 
 	janeOrder := entities.NewOrder("jane", "ETHUSD", false, entities.LimitOrderType, 4, 110)
-	ex.PlaceLimitOrder(*janeOrder)
+	ex.PlaceLimitOrderAndPersist(*janeOrder)
 
 	junOrder := entities.NewOrder("jun", "ETHUSD", false, entities.LimitOrderType, 9, 105)
-	ex.PlaceLimitOrder(*junOrder)
+	ex.PlaceLimitOrderAndPersist(*junOrder)
 
 	jackOrder := entities.NewOrder("jack", "ETHUSD", false, entities.LimitOrderType, 9, 105)
-	ex.PlaceLimitOrder(*jackOrder)
+	ex.PlaceLimitOrderAndPersist(*jackOrder)
 
 	ex.CancelOrder(jimOrder.GetId(), "ETHUSD")
 	assert.Equal(t, 2000.0, ex.GetUsersMap()["jim"].Balance["ETH"])

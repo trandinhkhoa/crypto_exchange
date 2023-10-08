@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -67,7 +68,16 @@ func (ex *Exchange) GetLastPrice(ticker string) float64 {
 	return ex.orderbooksMap[Ticker(ticker)].GetLastTradedPrice()
 }
 
-func (ex *Exchange) PlaceLimitOrder(o entities.Order) {
+func (ex *Exchange) ReplayPlaceLimitOrder(o entities.Order) {
+	ticker := Ticker(o.GetTicker())
+	// block user balance
+	// TODO: check user's balance
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
+	ex.orderbooksMap[ticker].PlaceLimitOrder(o)
+}
+
+func (ex *Exchange) PlaceLimitOrderAndPersist(o entities.Order) {
 	ticker := Ticker(o.GetTicker())
 	userId := o.GetUserId()
 	user := ex.usersMap[userId]
@@ -231,4 +241,21 @@ func (ex *Exchange) persistAfterMarketOrder(tradesArray []entities.Trade) {
 			ex.OrdersRepo.Update(trade.GetSeller())
 		}
 	}
+}
+
+func (ex *Exchange) Recover() {
+	buyOrders := ex.OrdersRepo.ReadAll("buy")
+	for _, order := range buyOrders {
+		ex.ReplayPlaceLimitOrder(order)
+	}
+	sellOrders := ex.OrdersRepo.ReadAll("sell")
+	for _, order := range sellOrders {
+		ex.ReplayPlaceLimitOrder(order)
+	}
+	usersList := ex.UsersRepo.ReadAll()
+	for _, user := range usersList {
+		ex.usersMap[user.GetUserId()] = &user
+	}
+	// TODO: deadlock somewhere ? this line never reached
+	fmt.Println("RECOVERED")
 }
