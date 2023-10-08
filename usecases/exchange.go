@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -100,7 +101,20 @@ func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
 	// match
 	// TODO: PlaceMarketOrder() should not modify the orderbook.
 	// Market Buyer/Seller might not have sufficient balance and there is no way to check it before calling PlaceMarketOrder
-	tradesArray := ex.orderbooksMap[ticker].PlaceMarketOrder(o)
+
+	// TODO: bubble up the error
+	tradesArray, err := ex.orderbooksMap[ticker].PlaceMarketOrder(o)
+	if err != nil {
+		var noLiquidError *entities.NoLiquidityError
+		switch {
+		case errors.As(err, &noLiquidError):
+			logrus.Error(noLiquidError.Error())
+		default:
+			logrus.Errorf("Unexpected error placing market order id: %d, error: %s \n", o.GetId(), err)
+		}
+		return nil
+	}
+
 	//execute
 	for _, trade := range tradesArray {
 		buyer := ex.usersMap[trade.GetBuyer().GetUserId()]
@@ -133,12 +147,18 @@ func (ex *Exchange) RegisterUser(userId string) {
 	newUser.Balance[string(ETHUSD)[:3]] = 0
 	newUser.Balance[string(ETHUSD)[3:]] = 0
 	ex.usersMap[userId] = newUser
+
+	//persist the creation
+	ex.UsersRepo.Create(*newUser)
 }
 
 func (ex *Exchange) RegisterUserWithBalance(userId string, balance map[string]float64) {
 	// TODO: should have an array of tickers, iterate it and set their balances to zeros
 	newUser := entities.NewUser(userId, balance)
 	ex.usersMap[userId] = newUser
+
+	//persist the creation
+	ex.UsersRepo.Create(*newUser)
 }
 
 func (ex *Exchange) GetBook(ticker string) ([]*entities.Limit, float64, []*entities.Limit, float64) {

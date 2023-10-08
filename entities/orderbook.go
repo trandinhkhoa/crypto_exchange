@@ -5,6 +5,14 @@ import (
 	"fmt"
 )
 
+type NoLiquidityError struct {
+	msg string
+}
+
+func (e NoLiquidityError) Error() string {
+	return e.msg
+}
+
 type Orderbook struct {
 	// TODO: limitation: this way the "interface" of Orderbook is tied to its implementation
 	// e.g. switch from BST to heap will be costly
@@ -55,10 +63,17 @@ func (ob *Orderbook) PlaceLimitOrder(incomingOrder Order) {
 	ob.idToOrderMap[incomingOrder.GetId()] = &incomingOrder
 }
 
-func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) []Trade {
-	// TODO: check volume somewhere else ? dont use panic ?
+func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) ([]Trade, error) {
 	if (incomingOrder.GetIsBid() && ob.GetTotalVolumeAllSells() < incomingOrder.Size) || (!incomingOrder.GetIsBid() && ob.GetTotalVolumeAllBuys() < incomingOrder.Size) {
-		panic("Not enough volume")
+		var msg string
+		if incomingOrder.GetIsBid() {
+			msg = "Out of sell liquidity"
+		} else {
+			msg = "Out of buy liquidity"
+		}
+		return nil, &NoLiquidityError{
+			msg: msg,
+		}
 	}
 	// check if price level is in buyTree/sellTree
 	tradesArray := make([]Trade, 0)
@@ -79,6 +94,7 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) []Trade {
 
 	for incomingOrder.Size > 0 {
 		existingOrder := bestLimit.headOrder
+		// TODO: remove these println
 		if existingOrder == nil {
 			fmt.Println("HELLO  existingOrder == nil")
 		}
@@ -161,7 +177,7 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) []Trade {
 	}
 	ob.lastTrades = append(ob.lastTrades, tradesArray...)
 	ob.lastTradedPrice = tradesArray[len(tradesArray)-1].GetPrice()
-	return tradesArray
+	return tradesArray, nil
 }
 
 func (ob Orderbook) GetTotalVolumeAllSells() float64 {

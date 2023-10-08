@@ -124,7 +124,9 @@ func TestPlaceMarketOrderBuyOneFill(t *testing.T) {
 	assert.Equal(t, ob.GetTotalVolumeAllSells(), 24.0)
 
 	incomingOrder = entities.NewOrder("lily", "ticker", true, entities.MarketOrderType, 1, 0)
-	tradesArray := ob.PlaceMarketOrder(*incomingOrder)
+	tradesArray, err := ob.PlaceMarketOrder(*incomingOrder)
+
+	assert.NoError(t, err)
 	assert.Equal(t, ob.GetTotalVolumeAllSells(), 23.0)
 	assert.Equal(t, ob.LowestSell.GetLimitPrice(), 1000.0)
 
@@ -173,7 +175,9 @@ func TestPlaceMarketOrderBuyOnePartialFill(t *testing.T) {
 	assert.Equal(t, ob.GetTotalVolumeAllSells(), 24.0)
 
 	incomingOrder = entities.NewOrder("lily", "ticker", true, entities.MarketOrderType, 0.5, 0)
-	tradesArray := ob.PlaceMarketOrder(*incomingOrder)
+	tradesArray, err := ob.PlaceMarketOrder(*incomingOrder)
+
+	assert.NoError(t, err)
 	assert.Equal(t, ob.GetTotalVolumeAllSells(), 23.5)
 	assert.Equal(t, ob.LowestSell.GetLimitPrice(), 900.0)
 
@@ -208,7 +212,9 @@ func TestPlaceMarketOrderBuyMultiFill(t *testing.T) {
 	assert.Equal(t, ob.GetTotalVolumeAllSells(), 24.0)
 
 	incomingOrder = entities.NewOrder("lily", "ticker", true, entities.MarketOrderType, 23.5, 0)
-	tradesArray := ob.PlaceMarketOrder(*incomingOrder)
+	tradesArray, err := ob.PlaceMarketOrder(*incomingOrder)
+
+	assert.NoError(t, err)
 	assert.Equal(t, ob.GetTotalVolumeAllSells(), 0.5)
 	assert.Equal(t, ob.LowestSell.GetLimitPrice(), 1100.0)
 
@@ -221,7 +227,9 @@ func TestPlaceMarketOrderBuyMultiFill(t *testing.T) {
 	assert.Equal(t, tradesArray[4].GetSeller().GetUserId(), "jane")
 
 	incomingOrder = entities.NewOrder("lily", "ticker", true, entities.MarketOrderType, 0.5, 0)
-	tradesArray = ob.PlaceMarketOrder(*incomingOrder)
+	tradesArray, err = ob.PlaceMarketOrder(*incomingOrder)
+
+	assert.NoError(t, err)
 	assert.Equal(t, ob.GetTotalVolumeAllSells(), 0.0)
 	// check returned trades array
 	assert.Equal(t, tradesArray[0].GetSeller().GetUserId(), "jane")
@@ -266,7 +274,9 @@ func TestPlaceMarketOrderSellMultiFill(t *testing.T) {
 	assert.Equal(t, ob.GetTotalVolumeAllBuys(), 24.0)
 
 	incomingOrder = entities.NewOrder("lily", "ticker", false, entities.MarketOrderType, 23.5, 0)
-	tradesArray := ob.PlaceMarketOrder(*incomingOrder)
+	tradesArray, err := ob.PlaceMarketOrder(*incomingOrder)
+
+	assert.NoError(t, err)
 	assert.Equal(t, ob.GetTotalVolumeAllBuys(), 0.5)
 	assert.Equal(t, ob.HighestBuy.GetLimitPrice(), 900.0)
 
@@ -279,7 +289,9 @@ func TestPlaceMarketOrderSellMultiFill(t *testing.T) {
 	assert.Equal(t, tradesArray[4].GetBuyer().GetUserId(), "jim")
 
 	incomingOrder = entities.NewOrder("lily", "ticker", false, entities.MarketOrderType, 0.5, 0)
-	tradesArray = ob.PlaceMarketOrder(*incomingOrder)
+	tradesArray, err = ob.PlaceMarketOrder(*incomingOrder)
+
+	assert.NoError(t, err)
 	assert.Equal(t, ob.GetTotalVolumeAllBuys(), 0.0)
 
 	// check returned trades array

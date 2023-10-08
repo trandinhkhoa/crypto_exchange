@@ -13,19 +13,25 @@ import (
 
 // do extra setup or teardown before or after a test executes.
 // It is also sometimes necessary to control which code runs on the main thread.
+var ex *usecases.Exchange
+
 func TestMain(m *testing.M) {
+
+	ex = usecases.NewExchange()
+	// TODO: not pretty but i dont think the dependency rule is violated here. As package `usecases_test` is not really inside package `server`
+	dbHandler := server.SetupDatabase("./test.db")
+	// injections of implementations
+	ordersRepoImpl := server.NewOrdersRepoImpl(dbHandler)
+	ex.OrdersRepo = ordersRepoImpl
+	usersRepoImpl := server.NewUsersRepoImpl(dbHandler)
+	ex.UsersRepo = usersRepoImpl
+
 	// Disable logrus in tests
 	logrus.SetOutput(io.Discard)
 	m.Run()
 }
-func TestPlaceLimitOrderExchange(t *testing.T) {
-	ex := usecases.NewExchange()
-	// TODO: not pretty but i dont think the dependency rule is violated here. As package `usecases_test` is not really inside package `server`
-	ordersRepoImpl := server.OrdersRepoImpl{}
-	ex.OrdersRepo = ordersRepoImpl
-	usersRepoImpl := server.UsersRepoImpl{}
-	ex.UsersRepo = usersRepoImpl
 
+func TestPlaceLimitOrderExchange(t *testing.T) {
 	ex.RegisterUserWithBalance("john",
 		map[string]float64{
 			"ETH": 2000.0,
@@ -101,12 +107,7 @@ func TestPlaceLimitOrderExchange(t *testing.T) {
 }
 
 func TestCancelOrderExchange(t *testing.T) {
-	ex := usecases.NewExchange()
 	// TODO: not pretty but i dont think the dependency rule is violated here. As package `usecases_test` is not really inside package `server`
-	ordersRepoImpl := server.OrdersRepoImpl{}
-	ex.OrdersRepo = ordersRepoImpl
-	usersRepoImpl := server.UsersRepoImpl{}
-	ex.UsersRepo = usersRepoImpl
 
 	ex.RegisterUserWithBalance("john",
 		map[string]float64{

@@ -13,6 +13,23 @@ import (
 	"github.com/trandinhkhoa/crypto-exchange/usecases"
 )
 
+var ex *usecases.Exchange
+
+func TestMain(m *testing.M) {
+	// Disable logrus in tests
+	// logrus.SetOutput(io.Discard)
+
+	ex = usecases.NewExchange()
+	dbHandler := server.SetupDatabase("./test.db")
+	// injections of implementations
+	ordersRepoImpl := server.NewOrdersRepoImpl(dbHandler)
+	ex.OrdersRepo = ordersRepoImpl
+	usersRepoImpl := server.NewUsersRepoImpl(dbHandler)
+	ex.UsersRepo = usersRepoImpl
+
+	m.Run()
+}
+
 func TestServerHandlePlaceOrder(t *testing.T) {
 	// Setting up the Echo server for testing
 	e := echo.New()
@@ -33,14 +50,6 @@ func TestServerHandlePlaceOrder(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	c := e.NewContext(req, rec)
-
-	ex := usecases.NewExchange()
-
-	// injections of implementations
-	ordersRepoImpl := server.OrdersRepoImpl{}
-	ex.OrdersRepo = ordersRepoImpl
-	usersRepoImpl := server.UsersRepoImpl{}
-	ex.UsersRepo = usersRepoImpl
 
 	ex.RegisterUserWithBalance("jane",
 		map[string]float64{

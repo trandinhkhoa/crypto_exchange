@@ -99,6 +99,17 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
 
 	return c.JSON(200, orderBookData)
 ```
+    - panic vs log.Fatal
+        - Defers will be executed when a program panics,
+        - fatal
+            - Fatal level is effectively logging the message, then calling os.Exit(1). In principal this means:
+                - defer statements in other goroutines don’t run.
+                - buffers aren’t flushed.
+                - temporary files and directories aren’t removed.
+            - dont use this
+        - in libraries you shouldn't use neither in most cases
+        - panic only when there is no logical way that the program can continue to operate
+    - https://stackoverflow.com/questions/30890591/advice-on-writing-idiomatic-golang/30891188#30891188
 
 
 - makers:

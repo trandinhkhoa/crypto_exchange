@@ -1,15 +1,17 @@
 package server
 
 import (
+	"database/sql"
+
+	_ "github.com/mattn/go-sqlite3"
+
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"runtime/debug"
 	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/sirupsen/logrus"
 	"github.com/trandinhkhoa/crypto-exchange/entities"
 	"github.com/trandinhkhoa/crypto-exchange/usecases"
@@ -208,34 +210,6 @@ func httpErrorHandler(err error, c echo.Context) {
 	c.JSON(http.StatusBadRequest, err)
 }
 
-func PanicRecoveryMiddleware() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			defer func() {
-				if r := recover(); r != nil {
-					err, ok := r.(error)
-					var panicMsg string
-					if ok {
-						panicMsg = err.Error()
-					} else {
-						panicMsg = fmt.Sprintf("%v", r)
-					}
-					// log the panic message and stack trace here.
-					errStr := fmt.Errorf("panic recovered: %s\n%s", panicMsg, string(debug.Stack()))
-					fmt.Println(errStr)
-
-					// Return the panic message to the client.
-					// For security reasons, might need to replace the detailed message with a generic one in production.
-					c.JSON(http.StatusInternalServerError, map[string]interface{}{
-						"message": panicMsg,
-					})
-				}
-			}()
-			return next(c)
-		}
-	}
-}
-
 // this function is called everytime a client connect to the websocket
 func (handler WebServiceHandler) WebSocketHandlerCurrentPrice(ws *websocket.Conn) {
 	// TODO: let client choose ticker
@@ -367,12 +341,63 @@ func (handler WebServiceHandler) HandleGetUser(c echo.Context) error {
 	return c.JSON(200, user)
 }
 
+func SetupDatabase(dbLocation string) *sql.DB {
+	// Open SQLite database
+	db, err := sql.Open("sqlite3", dbLocation)
+	if err != nil {
+		logrus.Fatal("Unable to open database", err)
+		// TODO: how to write defer only once for all err
+		defer db.Close()
+	}
+
+	// Create table
+	// TODO: avoid hardcoding all currencies
+	createTableSQL := `CREATE TABLE IF NOT EXISTS users (
+		"userid" TEXT PRIMARY KEY,
+		"ETH" FLOAT,
+		"USD" FLOAT
+	);`
+	_, err = db.Exec(createTableSQL)
+	if err != nil {
+		logrus.Fatal("Unable to create table", err)
+		defer db.Close()
+	}
+
+	createTableSQL = `CREATE TABLE IF NOT EXISTS buyOrders (
+		"id" INTEGER PRIMARY KEY,
+		"userid" TEXT,
+		"size" INTEGER,
+		"price" INTEGER,
+		"timestamp" INTEGER
+	);`
+
+	_, err = db.Exec(createTableSQL)
+	if err != nil {
+		logrus.Fatal("Unable to create table", err)
+		defer db.Close()
+	}
+
+	createTableSQL = `CREATE TABLE IF NOT EXISTS sellOrders (
+		"id" INTEGER PRIMARY KEY,
+		"userid" TEXT,
+		"size" INTEGER,
+		"price" INTEGER,
+		"timestamp" INTEGER
+	);`
+
+	_, err = db.Exec(createTableSQL)
+	if err != nil {
+		logrus.Fatal("Unable to create table", err)
+		defer db.Close()
+	}
+
+	logrus.Info("Connected to the database")
+	return db
+}
+
 // TODO: this is infrastructure code. need to separate it from the controller above
 func StartServer() {
 	e := echo.New()
-	// Recover middleware to catch panics
-	e.Use(middleware.Recover())
-	e.Use(PanicRecoveryMiddleware())
 
 	e.HTTPErrorHandler = httpErrorHandler
 	// client, err := ethclient.Dial("http://localhost:8545")
@@ -380,13 +405,15 @@ func StartServer() {
 	// 	log.Fatal(err)
 	// }
 
+	dbHandler := SetupDatabase("./real.db")
+	defer dbHandler.Close()
 	handler := WebServiceHandler{}
 	ex := usecases.NewExchange()
 
 	// injections of implementations
-	ordersRepoImpl := OrdersRepoImpl{}
+	ordersRepoImpl := NewOrdersRepoImpl(dbHandler)
 	ex.OrdersRepo = ordersRepoImpl
-	usersRepoImpl := UsersRepoImpl{}
+	usersRepoImpl := NewUsersRepoImpl(dbHandler)
 	ex.UsersRepo = usersRepoImpl
 
 	handler.ex = ex

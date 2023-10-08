@@ -2,3 +2,4 @@
 .vscode/
 Coinbase_BTCUSD_ob_10_2017_09_05.csv
 *.DS_Store
+*.db

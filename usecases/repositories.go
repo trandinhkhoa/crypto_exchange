@@ -10,8 +10,10 @@ type OrdersRepository interface {
 }
 
 type UsersRepository interface {
-	Create()
+	Create(entities.User)
 	// Read()
 	Update(entities.User)
 	// Delete()
 }
+
+// TODO: Last Trade Repository
