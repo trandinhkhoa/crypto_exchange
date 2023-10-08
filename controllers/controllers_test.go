@@ -2,7 +2,6 @@ package controllers_test
 
 import (
 	"bytes"
-	"database/sql"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,28 +19,31 @@ import (
 
 var ex *usecases.Exchange
 
-func setup() (string, *sql.DB) {
-
-	ex = usecases.NewExchange()
-	// TODO: not pretty but i dont think the dependency rule is violated here. Unlike `controllers`, package `controllers_test` is not really inside package `server`
-	filePath := "./test.db"
+func deleteDb(filePath string) {
 	if _, err := os.Stat(filePath); err == nil {
-		// File exists, proceed to delete
 		err := os.Remove(filePath)
 		if err != nil {
 			logrus.Error("Error cleaning up test db: ", err)
-			return filePath, nil
+			return
 		}
 	} else if os.IsNotExist(err) {
-		// File does not exist, do nothing
-		logrus.Error("File does not exist, skipping")
+		logrus.Info("File does not exist, skipping")
 	} else {
-		// Some other error occurred
 		logrus.Error("Error cleaning up test db: ", err)
-		return filePath, nil
+		return
 	}
-	dbHandler := infrastructure.SetupDatabase("./test.db")
+}
+
+func setup() (string, controllers.SqlDbHandler) {
+
+	ex = usecases.NewExchange()
+	// TODO: Mock the implementation of OrdersRepository and UsersRepository
+	// short on time for now so i just use sqlite handler instead
+	filePath := "./test.db"
+	deleteDb(filePath)
+
 	// injections of implementations
+	dbHandler := infrastructure.NewSqliteDbHandler("./test.db")
 	ordersRepoImpl := controllers.NewOrdersRepoImpl(dbHandler)
 	ex.OrdersRepo = ordersRepoImpl
 	usersRepoImpl := controllers.NewUsersRepoImpl(dbHandler)
@@ -51,34 +53,17 @@ func setup() (string, *sql.DB) {
 	return filePath, dbHandler
 }
 
-func teardown(filePath string, dbHandler *sql.DB) {
-	//tear down
+// TODO: should hide even the fact that it is a SQL db
+func teardown(filePath string, dbHandler controllers.SqlDbHandler) {
 	dbHandler.Close()
-	if _, err := os.Stat(filePath); err == nil {
-		// File exists, proceed to delete
-		err := os.Remove(filePath)
-		if err != nil {
-			logrus.Error("Error cleaning up test db: ", err)
-			return
-		}
-	} else if os.IsNotExist(err) {
-		// File does not exist, do nothing
-		logrus.Info("File does not exist, skipping")
-	} else {
-		// Some other error occurred
-		logrus.Error("Error cleaning up test db: ", err)
-		return
-	}
+	deleteDb(filePath)
 }
 
 func setupTest() func() {
-	// Setup code here
 	filePath, dbHandler := setup()
 
-	// tear down later
 	return func() {
 		teardown(filePath, dbHandler)
-		// tear-down code here
 	}
 }
 

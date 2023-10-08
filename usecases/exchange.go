@@ -35,8 +35,8 @@ func NewExchange() *Exchange {
 	return newExchange
 }
 
-func (ex Exchange) GetUsersMap() map[string]entities.User {
-	// return a copy, not a reference
+// there is a lock inside Exchange so the pointer is the receiver
+func (ex *Exchange) GetUsersMap() map[string]entities.User {
 	usersMap := make(map[string]entities.User, 0)
 
 	for k, v := range ex.usersMap {
@@ -45,7 +45,7 @@ func (ex Exchange) GetUsersMap() map[string]entities.User {
 	return usersMap
 }
 
-func (ex Exchange) GetLastTrades(ticker string, k int) []entities.Trade {
+func (ex *Exchange) GetLastTrades(ticker string, k int) []entities.Trade {
 	length := len(ex.orderbooksMap[Ticker(ticker)].GetLastTrades())
 	if k > length {
 		return ex.orderbooksMap[Ticker(ticker)].GetLastTrades()
@@ -53,17 +53,17 @@ func (ex Exchange) GetLastTrades(ticker string, k int) []entities.Trade {
 	return ex.orderbooksMap[Ticker(ticker)].GetLastTrades()[length-k:]
 }
 
-func (ex Exchange) GetBestBuys(ticker string, k int) []*entities.Limit {
+func (ex *Exchange) GetBestBuys(ticker string, k int) []*entities.Limit {
 	book := ex.orderbooksMap[Ticker(ticker)]
 	return book.GetBestLimits(book.BuyTree, k)
 }
 
-func (ex Exchange) GetBestSells(ticker string, k int) []*entities.Limit {
+func (ex *Exchange) GetBestSells(ticker string, k int) []*entities.Limit {
 	book := ex.orderbooksMap[Ticker(ticker)]
 	return book.GetBestLimits(book.SellTree, k)
 }
 
-func (ex Exchange) GetLastPrice(ticker string) float64 {
+func (ex *Exchange) GetLastPrice(ticker string) float64 {
 	return ex.orderbooksMap[Ticker(ticker)].GetLastTradedPrice()
 }
 
@@ -87,7 +87,7 @@ func (ex *Exchange) PlaceLimitOrder(o entities.Order) {
 
 	ex.orderbooksMap[ticker].PlaceLimitOrder(o)
 
-	ex.persistAfterLimitOrder(o)
+	go ex.persistAfterLimitOrder(o)
 }
 
 func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
@@ -136,7 +136,7 @@ func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
 		}).Info("Order Executed")
 	}
 
-	ex.persistAfterMarketOrder(tradesArray)
+	go ex.persistAfterMarketOrder(tradesArray)
 
 	return tradesArray
 }
@@ -199,21 +199,14 @@ func (ex *Exchange) CancelOrder(orderId int64, ticker string) {
 	}
 }
 
-type UserRepositoryImpl struct {
-}
-
-func (userRepo UserRepositoryImpl) Update() {
-
-}
-
-func (ex Exchange) persistAfterLimitOrder(order entities.Order) {
+func (ex *Exchange) persistAfterLimitOrder(order entities.Order) {
 	// persist users balance
 	ex.UsersRepo.Update(ex.GetUsersMap()[order.GetUserId()])
 	// PlaceLimitOrder only adds for now so persist the creation
 	ex.OrdersRepo.Create(order)
 }
 
-func (ex Exchange) persistAfterMarketOrder(tradesArray []entities.Trade) {
+func (ex *Exchange) persistAfterMarketOrder(tradesArray []entities.Trade) {
 	for _, trade := range tradesArray {
 		buyer := trade.GetBuyer()
 		seller := trade.GetSeller()

@@ -1,25 +1,24 @@
 package controllers
 
 import (
-	"database/sql"
 	"fmt"
 
-	"github.com/sirupsen/logrus"
 	"github.com/trandinhkhoa/crypto-exchange/entities"
 )
 
 type SqlDbHandler interface {
 	Exec(string) error
+	Close()
 	// Query(string)
 }
 
 type OrdersRepoImpl struct {
-	sqliteHandler *sql.DB
+	sqlDbHandler SqlDbHandler
 }
 
-func NewOrdersRepoImpl(sqliteHandler *sql.DB) *OrdersRepoImpl {
+func NewOrdersRepoImpl(sqlDbHandler SqlDbHandler) *OrdersRepoImpl {
 	return &OrdersRepoImpl{
-		sqliteHandler: sqliteHandler,
+		sqlDbHandler: sqlDbHandler,
 	}
 }
 
@@ -46,9 +45,7 @@ func (ordersRepoImpl OrdersRepoImpl) Create(order entities.Order) {
 		order.GetId(), order.GetUserId(), order.GetSize(), order.GetLimitPrice(), order.GetTimeStamp(),
 	)
 
-	if err := ordersRepoImpl.sqliteHandler.Exec(queryStr); err != nil {
-		logrus.Fatal("Unable to create order: ", err)
-	}
+	ordersRepoImpl.sqlDbHandler.Exec(queryStr)
 }
 
 func (ordersRepoImpl OrdersRepoImpl) Update(order entities.Order) {
@@ -63,10 +60,7 @@ func (ordersRepoImpl OrdersRepoImpl) Update(order entities.Order) {
 		size, order.GetSize(),
 		id, order.GetId())
 
-	_, err := ordersRepoImpl.sqliteHandler.Exec(queryStr)
-	if err != nil {
-		logrus.Fatal("Unable to update order: ", err)
-	}
+	ordersRepoImpl.sqlDbHandler.Exec(queryStr)
 }
 
 func (ordersRepoImpl OrdersRepoImpl) Delete(order entities.Order) {
@@ -80,19 +74,16 @@ func (ordersRepoImpl OrdersRepoImpl) Delete(order entities.Order) {
 		tableName,
 		id, order.GetId())
 
-	_, err := ordersRepoImpl.sqliteHandler.Exec(queryStr)
-	if err != nil {
-		logrus.Fatal("Unable to delete order: ", err)
-	}
+	ordersRepoImpl.sqlDbHandler.Exec(queryStr)
 }
 
 type UsersRepoImpl struct {
-	dbHandler *sql.DB
+	sqlDbHandler SqlDbHandler
 }
 
-func NewUsersRepoImpl(dbHandler *sql.DB) *UsersRepoImpl {
+func NewUsersRepoImpl(sqlDbHandler SqlDbHandler) *UsersRepoImpl {
 	return &UsersRepoImpl{
-		dbHandler: dbHandler,
+		sqlDbHandler: sqlDbHandler,
 	}
 }
 
@@ -103,10 +94,7 @@ func (usersRepoImpl UsersRepoImpl) Create(user entities.User) {
 		userid, "ETH", "USD",
 		user.GetUserId(), user.Balance["ETH"], user.Balance["USD"])
 
-	_, err := usersRepoImpl.dbHandler.Exec(queryStr)
-	if err != nil {
-		logrus.Fatal("Unable to create user: ", err)
-	}
+	usersRepoImpl.sqlDbHandler.Exec(queryStr)
 }
 
 func (usersRepoImpl UsersRepoImpl) Update(user entities.User) {
@@ -117,8 +105,5 @@ func (usersRepoImpl UsersRepoImpl) Update(user entities.User) {
 		"USD", user.Balance["USD"],
 		userid, user.GetUserId())
 
-	_, err := usersRepoImpl.dbHandler.Exec(queryStr)
-	if err != nil {
-		logrus.Fatal("Unable to update user: ", err, queryStr)
-	}
+	usersRepoImpl.sqlDbHandler.Exec(queryStr)
 }

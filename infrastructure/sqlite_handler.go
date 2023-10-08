@@ -2,61 +2,54 @@ package infrastructure
 
 import (
 	"database/sql"
+	"fmt"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
 )
 
-func SetupDatabase(dbLocation string) *sql.DB {
-	// Open SQLite database
-	db, err := sql.Open("sqlite3", dbLocation)
+type SqliteDbHandler struct {
+	dbConn *sql.DB
+}
+
+func NewSqliteDbHandler(dbFileName string) *SqliteDbHandler {
+	db, err := sql.Open("sqlite3", dbFileName)
 	if err != nil {
-		logrus.Fatal("Unable to open database", err)
-		// TODO: how to write defer only once for all err
-		defer db.Close()
+		db.Close()
+		panic(fmt.Sprintf("Unable to open database %s", err.Error()))
 	}
 
-	// Create table
-	// TODO: avoid hardcoding all currencies
-	createTableSQL := `CREATE TABLE IF NOT EXISTS users (
-		"userid" TEXT PRIMARY KEY,
-		"ETH" FLOAT,
-		"USD" FLOAT
-	);`
-	_, err = db.Exec(createTableSQL)
-	if err != nil {
-		logrus.Fatal("Unable to create table", err)
-		defer db.Close()
-	}
-
-	createTableSQL = `CREATE TABLE IF NOT EXISTS buyOrders (
-		"id" INTEGER PRIMARY KEY,
-		"userid" TEXT,
-		"size" INTEGER,
-		"price" INTEGER,
-		"timestamp" INTEGER
-	);`
-
-	_, err = db.Exec(createTableSQL)
-	if err != nil {
-		logrus.Fatal("Unable to create table", err)
-		defer db.Close()
-	}
-
-	createTableSQL = `CREATE TABLE IF NOT EXISTS sellOrders (
-		"id" INTEGER PRIMARY KEY,
-		"userid" TEXT,
-		"size" INTEGER,
-		"price" INTEGER,
-		"timestamp" INTEGER
-	);`
-
-	_, err = db.Exec(createTableSQL)
-	if err != nil {
-		logrus.Fatal("Unable to create table", err)
-		defer db.Close()
+	sqliteDbHandler := &SqliteDbHandler{
+		dbConn: db,
 	}
 
 	logrus.Info("Connected to the database")
-	return db
+
+	return sqliteDbHandler
+}
+
+func (sqlDbHandler *SqliteDbHandler) Exec(statement string) error {
+	retryCount := 4
+	var err error
+	if _, err = sqlDbHandler.dbConn.Exec(statement); err != nil {
+		logrus.Error(fmt.Sprintf("Unable to exec statement. Error: %s. Retrying... Statement: %s", err.Error(), statement))
+		for retryCount > 0 {
+			_, err := sqlDbHandler.dbConn.Exec(statement)
+			if err == nil {
+				logrus.Info(fmt.Sprintf("Retry OK. Statement: %s", statement))
+				break
+			}
+			retryCount -= 1
+		}
+	}
+	if err != nil {
+		logrus.Error(fmt.Sprintf("Unable to exec statement. Error: %s. Statement: %s", err.Error(), statement))
+		return err
+	} else {
+		return nil
+	}
+}
+
+func (sqlDbHandler *SqliteDbHandler) Close() {
+	sqlDbHandler.dbConn.Close()
 }

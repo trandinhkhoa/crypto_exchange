@@ -6,17 +6,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/trandinhkhoa/crypto-exchange/controllers"
 )
 
-const exchangeentities = "http://localhost:3000"
+type Client struct {
+	ExchangeServer string
+}
 
 type PlaceLimitOrderResponseBody struct {
 	Msg   string
@@ -37,9 +39,15 @@ type BestBidPriceResponseBody struct {
 	BestBidPrice float64
 }
 
-func GetCurrentPrice() (float64, error) {
-	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeentities+"/book/ETHUSD/currentPrice", nil)
-	respPrice, _ := http.DefaultClient.Do(reqPrice)
+func (client Client) GetCurrentPrice() (float64, error) {
+	reqPrice, err := http.NewRequest(http.MethodGet, client.ExchangeServer+"/book/ETHUSD/currentPrice", nil)
+	if err != nil {
+		logrus.Error(err)
+	}
+	respPrice, err := http.DefaultClient.Do(reqPrice)
+	if err != nil {
+		logrus.Error(err)
+	}
 	decodedRespPrice := &CurrentPriceResponseBody{}
 	if err := json.NewDecoder(respPrice.Body).Decode(decodedRespPrice); err != nil {
 		return 0, err
@@ -48,9 +56,15 @@ func GetCurrentPrice() (float64, error) {
 	return decodedRespPrice.CurrentPrice, nil
 }
 
-func GetBestAskPrice() (float64, error) {
-	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeentities+"/book/ETHUSD/bestAsk", nil)
-	respPrice, _ := http.DefaultClient.Do(reqPrice)
+func (client Client) GetBestAskPrice() (float64, error) {
+	reqPrice, err := http.NewRequest(http.MethodGet, client.ExchangeServer+"/book/ETHUSD/bestAsk", nil)
+	if err != nil {
+		logrus.Error(err)
+	}
+	respPrice, err := http.DefaultClient.Do(reqPrice)
+	if err != nil {
+		logrus.Error(err)
+	}
 	decodedRespPrice := &BestAskPriceResponseBody{}
 	if err := json.NewDecoder(respPrice.Body).Decode(decodedRespPrice); err != nil {
 		return 0, err
@@ -58,9 +72,15 @@ func GetBestAskPrice() (float64, error) {
 	return decodedRespPrice.BestAskPrice, nil
 }
 
-func GetBestBidPrice() (float64, error) {
-	reqPrice, _ := http.NewRequest(http.MethodGet, exchangeentities+"/book/ETHUSD/bestBid", nil)
-	respPrice, _ := http.DefaultClient.Do(reqPrice)
+func (client Client) GetBestBidPrice() (float64, error) {
+	reqPrice, err := http.NewRequest(http.MethodGet, client.ExchangeServer+"/book/ETHUSD/bestBid", nil)
+	if err != nil {
+		logrus.Error(err)
+	}
+	respPrice, err := http.DefaultClient.Do(reqPrice)
+	if err != nil {
+		logrus.Error(err)
+	}
 	decodedRespPrice := &BestBidPriceResponseBody{}
 	if err := json.NewDecoder(respPrice.Body).Decode(decodedRespPrice); err != nil {
 		return 0, err
@@ -81,10 +101,10 @@ type PlaceOrderRequest struct {
 	Ticker    string  `json:"Ticker"`
 }
 
-func PlaceLimitFromFile() {
+func (client Client) PlaceLimitFromFile() {
 	file, err := os.Open("Coinbase_BTCUSD_ob_10_2017_09_05.csv")
 	if err != nil {
-		log.Fatalf("Could not open the csv file: %s", err)
+		panic(fmt.Sprintf("Could not open the csv file: %s", err))
 	}
 
 	r := csv.NewReader(file)
@@ -96,7 +116,7 @@ func PlaceLimitFromFile() {
 			break
 		}
 		if err != nil {
-			log.Fatalf("Could not read the csv file: %s", err)
+			panic(fmt.Sprintf("Could not read the csv file: %s", err))
 		}
 
 		price, _ := strconv.ParseFloat(record[2], 64)
@@ -112,12 +132,12 @@ func PlaceLimitFromFile() {
 			Ticker:    "ETHUSD",
 		}
 
-		PlaceOrder(order)
+		client.PlaceOrder(order)
 		time.Sleep(1 * time.Millisecond)
 	}
 }
 
-func MakeMarket() {
+func (client Client) MakeMarket() {
 	ticker := time.NewTicker(75 * time.Millisecond)
 	const spread = 0.2
 	const halfSpread = spread / 2.0
@@ -125,7 +145,7 @@ func MakeMarket() {
 	for {
 		<-ticker.C
 
-		lastTradedPrice, err := GetCurrentPrice()
+		lastTradedPrice, err := client.GetCurrentPrice()
 		if err != nil || lastTradedPrice == 0 {
 			lastTradedPrice = simulateFetchPriceFromOtherExchange()
 		}
@@ -143,7 +163,7 @@ func MakeMarket() {
 			Price:     bidPrice,
 			Ticker:    "ETHUSD",
 		}
-		PlaceOrder(bidBody)
+		client.PlaceOrder(bidBody)
 
 		// Place ask order
 		askBody := controllers.PlaceOrderRequest{
@@ -154,12 +174,12 @@ func MakeMarket() {
 			Price:     askPrice,
 			Ticker:    "ETHUSD",
 		}
-		PlaceOrder(askBody)
+		client.PlaceOrder(askBody)
 	}
 }
 
-func PlaceOrder(order controllers.PlaceOrderRequest) error {
-	url := exchangeentities + "/order"
+func (client Client) PlaceOrder(order controllers.PlaceOrderRequest) error {
+	url := client.ExchangeServer + "/order"
 	orderBody, err := json.Marshal(order)
 	if err != nil {
 		return err
@@ -189,7 +209,7 @@ func PlaceOrder(order controllers.PlaceOrderRequest) error {
 	return nil
 }
 
-func PlaceMarketRepeat() {
+func (client Client) PlaceMarketRepeat() {
 	timer := time.NewTimer(1500 * time.Millisecond)
 	<-timer.C
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -225,7 +245,7 @@ func PlaceMarketRepeat() {
 			Size:      1,
 			Ticker:    "ETHUSD",
 		}
-		PlaceOrder(orderBody)
+		client.PlaceOrder(orderBody)
 		<-ticker.C
 	}
 }
