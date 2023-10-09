@@ -244,6 +244,7 @@ func (ex *Exchange) persistAfterMarketOrder(tradesArray []entities.Trade) {
 	}
 }
 
+// TODO: test for this
 func (ex *Exchange) Recover() {
 	buyOrders := ex.OrdersRepo.ReadAll("buy")
 	for _, order := range buyOrders {
@@ -255,7 +256,8 @@ func (ex *Exchange) Recover() {
 	}
 	usersList := ex.UsersRepo.ReadAll()
 	for _, user := range usersList {
-		ex.usersMap[user.GetUserId()] = &user
+		currentUser := user
+		ex.usersMap[user.GetUserId()] = &currentUser
 	}
 	lastTradesList := ex.LastTradesRepo.ReadAll()
 

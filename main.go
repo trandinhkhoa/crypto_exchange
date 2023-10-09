@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/sirupsen/logrus"
 	"github.com/trandinhkhoa/crypto-exchange/client"
 	"github.com/trandinhkhoa/crypto-exchange/controllers"
@@ -20,6 +21,7 @@ func init() {
 		DisableQuote:    true,
 		FullTimestamp:   true,
 	})
+	logrus.SetLevel(logrus.DebugLevel)
 }
 
 func initialTablesSetup(db controllers.SqlDbHandler) {
@@ -93,6 +95,10 @@ func createSomeUsers(apiHandler *controllers.WebServiceHandler) {
 
 func StartServer(freshstart bool, port int, serverStarted chan bool) {
 	e := echo.New()
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{echo.GET, echo.HEAD, echo.PUT, echo.PATCH, echo.POST, echo.DELETE},
+	}))
 
 	// client, err := ethclient.Dial("http://localhost:8545")
 
@@ -134,10 +140,13 @@ func StartServer(freshstart bool, port int, serverStarted chan bool) {
 
 	e.DELETE("/order/:ticker/:id", apiHandler.HandleCancelOrder)
 
+	// in practice, you would have 1 websocket URL.
+	// each usecase below would be represented by  an event specified in the payload
 	e.GET("/ws/currentPrice", echo.WrapHandler(websocket.Handler(apiHandler.WebSocketHandlerCurrentPrice)))
 	e.GET("/ws/lastTrades", echo.WrapHandler(websocket.Handler(apiHandler.WebSocketHandlerLastTrade)))
 	e.GET("/ws/bestSells", echo.WrapHandler(websocket.Handler(apiHandler.WebSocketHandlerBestSells)))
 	e.GET("/ws/bestBuys", echo.WrapHandler(websocket.Handler(apiHandler.WebSocketHandlerBestBuys)))
+	e.GET("/ws/userInfo", echo.WrapHandler(websocket.Handler(apiHandler.WebSocketHandlerUserInfo)))
 
 	e.Start(fmt.Sprintf(":%d", port))
 }

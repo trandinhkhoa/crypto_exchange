@@ -42,6 +42,11 @@ type LimitResponse struct {
 	Volume float64
 }
 
+type UserResponse struct {
+	UserId  string
+	Balance map[string]float64
+}
+
 // fields need to be visible to outer packages since this struct will be used by package json
 type PlaceOrderRequest struct {
 	UserId    string
@@ -321,4 +326,28 @@ func (handler WebServiceHandler) HandleGetUser(c echo.Context) error {
 		return c.JSON(404, fmt.Sprintf("UserId %s does not exist", userId))
 	}
 	return c.JSON(200, user)
+}
+
+func (handler WebServiceHandler) WebSocketHandlerUserInfo(ws *websocket.Conn) {
+	userId := ws.Request().URL.Query().Get("userId")
+
+	// TODO : only send back these info when there is actually an update
+	for {
+		user, ok := handler.Ex.GetUsersMap()[userId]
+		if !ok {
+			logrus.Debugf("userId %s does not exists", userId)
+		}
+		userResponse := &UserResponse{
+			UserId:  user.GetUserId(),
+			Balance: user.Balance,
+		}
+
+		jsonResponse, _ := json.Marshal(userResponse)
+
+		if err := websocket.Message.Send(ws, string(jsonResponse)); err != nil {
+			fmt.Println("Can't send:", err)
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 }
