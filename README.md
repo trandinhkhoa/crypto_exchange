@@ -2,11 +2,13 @@
 - For learning Go + trading engine
 - Orders matched uing Price-Time Priority
 - Execution here is just users' balance management
+    - For now there is balance udpate but no balance check
 - Simple market making
 - REST APIs + WebSocket APIs provided
 - Recovery from shutdown
     - async write to a database of orders (sqlite for now)
     - replay the database on restart
+- TODO: transfer of fund from crypto wallet. For now it's just an asset exchange, nothing crypto about it
 
 # Test
 ```
@@ -16,10 +18,10 @@ make test
 
 # Test
 - Run
+    - use `-freshstart=true` if this is first launch of the application. Otherwise it will  continue from a saved state in the database
 ```
 make run ARGS="-freshstart=false -port=3000"
 ```
-    - `-freshstart=true` if this is first time the application is ran. Otherwise it will  continue from a saved state in the database
 - Launch the frontend.
 https://github.com/trandinhkhoa/crypto_exchange_frontend
     - The frontend (hardcoded to run at port `8080`) is already hardcoded to connect to port `3000`.
@@ -88,7 +90,7 @@ Demo with the Front-end mentioned above
     },
     "traderJoe123": {
         "Balance": {
-        "ETH": -528,
+        "ETH": 528,
         "USD": 538735.5000000062
         }
     }
@@ -243,3 +245,7 @@ Demo with the Front-end mentioned above
     }
     ]
     ```
+
+# Reference:
+- I tried to follow a clean architecture https://manuel.kiessling.net/pdf/clean_arch.pdf
+    - folder `controllers` is the layer "interfaces" from the article

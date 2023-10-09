@@ -14,6 +14,8 @@ const (
 	ETHUSD Ticker = "ETHUSD"
 )
 
+var TickerList = [...]Ticker{ETHUSD}
+
 type Exchange struct {
 	usersMap      map[string]*entities.User
 	orderbooksMap map[Ticker]*entities.Orderbook
@@ -76,6 +78,10 @@ func (ex *Exchange) ReplayPlaceLimitOrder(o entities.Order) {
 	ex.mu.Lock()
 	defer ex.mu.Unlock()
 	ex.orderbooksMap[ticker].PlaceLimitOrder(o)
+
+	userId := o.GetUserId()
+	user := ex.usersMap[userId]
+	user.OpenOrders[o.GetId()] = o
 }
 
 func (ex *Exchange) PlaceLimitOrderAndPersist(o entities.Order) {
@@ -95,6 +101,7 @@ func (ex *Exchange) PlaceLimitOrderAndPersist(o entities.Order) {
 	} else {
 		user.Balance[ticker1] -= o.Size
 	}
+	user.OpenOrders[o.GetId()] = o
 
 	ex.orderbooksMap[ticker].PlaceLimitOrder(o)
 
@@ -133,11 +140,15 @@ func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
 
 		buyer.Balance[ticker1] += trade.GetSize()
 		if trade.GetBuyer().GetOrderType() == entities.MarketOrderType {
+			// taker is buyer
 			buyer.Balance[ticker2] -= trade.GetSize() * trade.GetPrice()
+			delete(seller.OpenOrders, trade.GetBuyer().GetId())
 		}
 
 		if trade.GetSeller().GetOrderType() == entities.MarketOrderType {
+			// taker is seller
 			seller.Balance[ticker1] -= trade.GetSize()
+			delete(buyer.OpenOrders, trade.GetSeller().GetId())
 		}
 		// TODO: john's limit order might be filled (here) at the same time as he is placing a new limit order
 		// -> concurrent write
@@ -208,6 +219,7 @@ func (ex *Exchange) CancelOrder(orderId int64, ticker string) {
 	} else {
 		user.Balance[ticker1] += size
 	}
+	delete(user.OpenOrders, orderId)
 }
 
 func (ex *Exchange) persistAfterLimitOrder(order entities.Order) {
@@ -246,6 +258,13 @@ func (ex *Exchange) persistAfterMarketOrder(tradesArray []entities.Trade) {
 
 // TODO: test for this
 func (ex *Exchange) Recover() {
+	// TODO: right now this Users MUST be recovered first. Remove MUST
+	usersList := ex.UsersRepo.ReadAll()
+	for _, user := range usersList {
+		currentUser := user
+		ex.usersMap[user.GetUserId()] = &currentUser
+	}
+
 	buyOrders := ex.OrdersRepo.ReadAll("buy")
 	for _, order := range buyOrders {
 		ex.ReplayPlaceLimitOrder(order)
@@ -254,16 +273,21 @@ func (ex *Exchange) Recover() {
 	for _, order := range sellOrders {
 		ex.ReplayPlaceLimitOrder(order)
 	}
-	usersList := ex.UsersRepo.ReadAll()
-	for _, user := range usersList {
-		currentUser := user
-		ex.usersMap[user.GetUserId()] = &currentUser
-	}
-	lastTradesList := ex.LastTradesRepo.ReadAll()
 
+	lastTradesList := ex.LastTradesRepo.ReadAll()
 	// TODO: OrdersRepo and LastsTradesRepo belong to /entities
 	for _, trade := range lastTradesList {
 		ex.orderbooksMap["ETHUSD"].AddLastTrade(trade)
 	}
 	logrus.Info("Orderbook state recovered from shutdown")
+}
+
+// TODO: very inefficient ??
+func (ex *Exchange) RetrieveOpenOrdersForUsers(userId string) map[int64]entities.Order {
+
+	user, ok := ex.usersMap[userId]
+	if !ok {
+		return nil
+	}
+	return user.OpenOrders
 }

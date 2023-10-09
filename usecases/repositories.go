@@ -2,6 +2,7 @@ package usecases
 
 import "github.com/trandinhkhoa/crypto-exchange/entities"
 
+// TODO: should be in entities ?
 type OrdersRepository interface {
 	Create(entities.Order)
 	// Read()
@@ -17,7 +18,6 @@ type UsersRepository interface {
 	// Delete()
 }
 
-// TODO: Last Trade Repository
 type LastTradesRepository interface {
 	Create(entities.Trade)
 	ReadAll() []entities.Trade

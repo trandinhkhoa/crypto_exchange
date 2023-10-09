@@ -43,8 +43,11 @@ type LimitResponse struct {
 }
 
 type UserResponse struct {
-	UserId  string
-	Balance map[string]float64
+	// TODO: e.g event: orderExecuted
+	Event      string
+	UserId     string
+	Balance    map[string]float64
+	OpenOrders []OrderResponse
 }
 
 // fields need to be visible to outer packages since this struct will be used by package json
@@ -337,9 +340,23 @@ func (handler WebServiceHandler) WebSocketHandlerUserInfo(ws *websocket.Conn) {
 		if !ok {
 			logrus.Debugf("userId %s does not exists", userId)
 		}
+		openOrders := handler.Ex.RetrieveOpenOrdersForUsers(user.GetUserId())
+		openOrderResponseArray := make([]OrderResponse, 0)
+		for _, order := range openOrders {
+			response := OrderResponse{
+				UserId:    order.GetUserId(),
+				Size:      order.GetSize(),
+				Price:     order.GetLimitPrice(),
+				Timestamp: order.GetTimeStamp(),
+				IsBid:     order.GetIsBid(),
+				ID:        int(order.GetId()),
+			}
+			openOrderResponseArray = append(openOrderResponseArray, response)
+		}
 		userResponse := &UserResponse{
-			UserId:  user.GetUserId(),
-			Balance: user.Balance,
+			UserId:     user.GetUserId(),
+			Balance:    user.Balance,
+			OpenOrders: openOrderResponseArray,
 		}
 
 		jsonResponse, _ := json.Marshal(userResponse)

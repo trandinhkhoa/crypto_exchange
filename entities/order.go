@@ -12,6 +12,8 @@ import (
 type User struct {
 	userId  string
 	Balance map[string]float64
+	// TODO: should be *Order to save space and avoid copy?
+	OpenOrders map[int64]Order
 }
 
 func (u User) GetUserId() string {
@@ -20,8 +22,9 @@ func (u User) GetUserId() string {
 
 func NewUser(userId string, balance map[string]float64) *User {
 	return &User{
-		userId:  userId,
-		Balance: balance,
+		userId:     userId,
+		Balance:    balance,
+		OpenOrders: make(map[int64]Order, 0),
 	}
 }
 
