@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -22,8 +21,10 @@ type Exchange struct {
 
 	// uppercase for now for quick injection
 	// TODO: pass these as constructor args ??
-	UsersRepo  UsersRepository
-	OrdersRepo OrdersRepository
+	UsersRepo UsersRepository
+	// TODO: OrdersRepo and LastsTradesRepo belong to /entities
+	OrdersRepo     OrdersRepository
+	LastTradesRepo LastTradesRepository
 }
 
 func NewExchange() *Exchange {
@@ -256,6 +257,11 @@ func (ex *Exchange) Recover() {
 	for _, user := range usersList {
 		ex.usersMap[user.GetUserId()] = &user
 	}
-	// TODO: deadlock somewhere ? this line never reached
-	fmt.Println("RECOVERED")
+	lastTradesList := ex.LastTradesRepo.ReadAll()
+
+	// TODO: OrdersRepo and LastsTradesRepo belong to /entities
+	for _, trade := range lastTradesList {
+		ex.orderbooksMap["ETHUSD"].AddLastTrade(trade)
+	}
+	logrus.Info("Orderbook state recovered from shutdown")
 }

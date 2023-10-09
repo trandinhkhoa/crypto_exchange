@@ -81,6 +81,7 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 	_, ok := handler.Ex.GetUsersMap()[placeOrderData.UserId]
 	if !ok {
 		msg := fmt.Sprintf("userId %s does not exist", placeOrderData.UserId)
+		logrus.Info(msg)
 		return c.JSON(400, map[string]interface{}{"msg": msg})
 	}
 

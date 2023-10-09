@@ -110,6 +110,33 @@ match = match ask against a bid, keep track of the size being filled (10 btc ask
         - in libraries you shouldn't use neither in most cases
         - panic only when there is no logical way that the program can continue to operate
     - https://stackoverflow.com/questions/30890591/advice-on-writing-idiomatic-golang/30891188#30891188
+    - debug config
+    ```
+    {
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Attach to Process",
+            "type": "go",
+            "request": "attach",
+            "mode": "local",
+            "processId": 0
+        },
+        {
+            "name": "Launch Program",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}",
+            "args": ["-freshstart=false", "-port=3000"]
+        }
+    ]
+}
+    ```
 
 
 - makers:

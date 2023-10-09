@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
@@ -57,6 +56,17 @@ func initialTablesSetup(db controllers.SqlDbHandler) {
 	if err := db.Exec(createTableSQL); err != nil {
 		panic("Unable to create table sellOrders")
 	}
+
+	createTableSQL = `CREATE TABLE IF NOT EXISTS lastTrades (
+		"id" INTEGER PRIMARY KEY AUTOINCREMENT,
+		"price" FLOAT,
+		"size" FLOAT,
+		"isBuyerMaker" BOOLEAN,
+		"timestamp" INTEGER
+	);`
+	if err := db.Exec(createTableSQL); err != nil {
+		panic("Unable to create table lastTrades")
+	}
 }
 
 func createSomeUsers(apiHandler *controllers.WebServiceHandler) {
@@ -81,7 +91,7 @@ func createSomeUsers(apiHandler *controllers.WebServiceHandler) {
 
 }
 
-func StartServer(freshstart bool, port int) {
+func StartServer(freshstart bool, port int, serverStarted chan bool) {
 	e := echo.New()
 
 	// client, err := ethclient.Dial("http://localhost:8545")
@@ -96,6 +106,8 @@ func StartServer(freshstart bool, port int) {
 	ex.OrdersRepo = ordersRepoImpl
 	usersRepoImpl := controllers.NewUsersRepoImpl(dbHandler)
 	ex.UsersRepo = usersRepoImpl
+	lastTradeRepoImpl := controllers.NewLastTradesRepoImpl(dbHandler)
+	ex.LastTradesRepo = lastTradeRepoImpl
 
 	apiHandler := controllers.WebServiceHandler{}
 	apiHandler.Ex = ex
@@ -107,6 +119,7 @@ func StartServer(freshstart bool, port int) {
 	} else {
 		ex.Recover()
 	}
+	close(serverStarted)
 
 	e.POST("/order", apiHandler.HandlePlaceOrder)
 
@@ -140,8 +153,10 @@ func main() {
 	// Parse the flags
 	flag.Parse()
 
-	go StartServer(freshstart, port)
-	time.Sleep(1 * time.Second)
+	serverStarted := make(chan bool)
+	go StartServer(freshstart, port, serverStarted)
+
+	<-serverStarted
 
 	marketMaker := &client.Client{
 		ExchangeServer: "http://localhost:" + fmt.Sprintf("%d", port),

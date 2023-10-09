@@ -58,6 +58,24 @@ func NewTrade(
 	}
 }
 
+func NewTradeWithTimeStamp(
+	buyer *Order,
+	seller *Order,
+	price float64,
+	size float64,
+	isBuyerMaker bool,
+	timestamp int64,
+) *Trade {
+	return &Trade{
+		buyer:        buyer,
+		seller:       seller,
+		price:        price,
+		size:         size,
+		isBuyerMaker: isBuyerMaker,
+		timestamp:    timestamp,
+	}
+}
+
 func (t Trade) String() string {
 	str := fmt.Sprintf("{\"buyerOrderId\": %d, \"buyerUserId\": \"%s\", \"sellerOrderId\": %d, \"sellerUserId\": \"%s\", \"price\": %.2f, \"size\": %.2f}",
 		t.buyer.id,

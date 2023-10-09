@@ -180,6 +180,11 @@ func (ob *Orderbook) PlaceMarketOrder(incomingOrder Order) ([]Trade, error) {
 	return tradesArray, nil
 }
 
+func (ob *Orderbook) AddLastTrade(trade Trade) {
+	ob.lastTrades = append(ob.lastTrades, trade)
+	ob.lastTradedPrice = trade.GetPrice()
+}
+
 func (ob Orderbook) GetTotalVolumeAllSells() float64 {
 	return sumTree(ob.SellTree)
 }

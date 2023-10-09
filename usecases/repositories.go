@@ -18,3 +18,7 @@ type UsersRepository interface {
 }
 
 // TODO: Last Trade Repository
+type LastTradesRepository interface {
+	Create(entities.Trade)
+	ReadAll() []entities.Trade
+}

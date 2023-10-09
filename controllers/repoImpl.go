@@ -168,3 +168,53 @@ func (userRepoImpl UsersRepoImpl) ReadAll() []entities.User {
 
 	return usersList
 }
+
+type LastTradesRepoImpl struct {
+	sqlDbHandler SqlDbHandler
+}
+
+func NewLastTradesRepoImpl(sqlDbHandler SqlDbHandler) *LastTradesRepoImpl {
+	return &LastTradesRepoImpl{
+		sqlDbHandler: sqlDbHandler,
+	}
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func (tradeRepoImpl LastTradesRepoImpl) Create(trade entities.Trade) {
+	tableName := "lastTrades"
+	queryStr := fmt.Sprintf("INSERT INTO %s (price, size, isBuyerMaker, timestamp) VALUES ('%f',%f,%d,%d)",
+		tableName,
+		trade.GetPrice(), trade.GetSize(), boolToInt(trade.GetIsBuyerMaker()), trade.GetTimeStamp())
+
+	tradeRepoImpl.sqlDbHandler.Exec(queryStr)
+}
+
+func (tradeRepoImpl LastTradesRepoImpl) ReadAll() []entities.Trade {
+	tableName := "lastTrades"
+
+	queryStr := fmt.Sprintf("SELECT * FROM %s", tableName)
+
+	tradeRepoImpl.sqlDbHandler.Exec(queryStr)
+	rows := tradeRepoImpl.sqlDbHandler.Query(queryStr)
+
+	tradesList := make([]entities.Trade, 0)
+	for rows.Next() {
+		// TODO: put this somewhere else ??
+		var id int64
+		var price float64
+		var size float64
+		var isBuyerMaker bool
+		var timestamp int64
+		rows.Scan(&id, &price, &size, &isBuyerMaker, &timestamp)
+		user := entities.NewTradeWithTimeStamp(nil, nil, price, size, isBuyerMaker, timestamp)
+		tradesList = append(tradesList, *user)
+	}
+
+	return tradesList
+}

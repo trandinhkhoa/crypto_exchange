@@ -4,6 +4,9 @@
 - Execution here is just users' balance management
 - Simple market making
 - REST APIs + WebSocket APIs provided
+- Recovery from shutdown
+    - async write to a database of orders (sqlite for now)
+    - replay the database on restart
 
 # Test
 ```
@@ -14,9 +17,9 @@ make test
 # Test
 - Run
 ```
-make run
+make run ARGS="-freshstart=false -port=3000"
 ```
-The server is hardcoded to run at port `3000`.
+    - `-freshstart=true` if this is first time the application is ran. Otherwise it will  continue from a saved state in the database
 - Launch the frontend.
 https://github.com/trandinhkhoa/crypto_exchange_frontend
     - The frontend (hardcoded to run at port `8080`) is already hardcoded to connect to port `3000`.

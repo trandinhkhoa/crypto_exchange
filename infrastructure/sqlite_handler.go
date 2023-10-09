@@ -76,7 +76,6 @@ func (sqlDbHandler *SqliteDbHandler) Query(statement string) controllers.Row {
 		logrus.Error(err)
 		return new(SqliteRow)
 	}
-	defer rows.Close()
 	row := new(SqliteRow)
 	row.Rows = rows
 	return row
