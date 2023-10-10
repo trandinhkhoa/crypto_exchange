@@ -61,14 +61,14 @@ type PlaceOrderRequest struct {
 }
 
 type WebServiceHandler struct {
-	Ex         *usecases.Exchange
-	wsConnPool map[string]*websocket.Conn
+	Ex             *usecases.Exchange
+	notifyUserImpl *NotifyUserImpl
 }
 
-func NewWebServiceHandler(ex *usecases.Exchange) *WebServiceHandler {
+func NewWebServiceHandler(ex *usecases.Exchange, notifyUserImpl *NotifyUserImpl) *WebServiceHandler {
 	handler := WebServiceHandler{}
 	handler.Ex = ex
-	handler.wsConnPool = make(map[string]*websocket.Conn, 0)
+	handler.notifyUserImpl = notifyUserImpl
 	return &handler
 }
 
@@ -335,7 +335,7 @@ func (handler WebServiceHandler) HandleGetUser(c echo.Context) error {
 
 func (handler *WebServiceHandler) WebSocketHandlerUserInfo(ws *websocket.Conn) {
 	userId := ws.Request().URL.Query().Get("userId")
-	handler.wsConnPool[userId] = ws
+	handler.notifyUserImpl.wsConnPool[userId] = ws
 
 	user, ok := handler.Ex.GetUsersMap()[userId]
 	if !ok {
@@ -371,22 +371,24 @@ func (handler *WebServiceHandler) WebSocketHandlerUserInfo(ws *websocket.Conn) {
 	}
 }
 
-// type NotifyUserImpl struct {
-// 	Handler *WebServiceHandler
-// }
+type NotifyUserImpl struct {
+	wsConnPool map[string]*websocket.Conn
+}
 
-func (handler *WebServiceHandler) Notify(userId string) {
-	wsConn, ok := handler.wsConnPool[userId]
+func NewNotifyUserImpl() *NotifyUserImpl {
+	return &NotifyUserImpl{
+		wsConnPool: make(map[string]*websocket.Conn, 0),
+	}
+}
+
+func (notifyUserImpl *NotifyUserImpl) Notify(user *entities.User) {
+	wsConn, ok := notifyUserImpl.wsConnPool[user.GetUserId()]
 	if !ok {
+		// user is not connected.
 		return
 	}
-	user, ok := handler.Ex.GetUsersMap()[userId]
-	if !ok {
-		logrus.Debugf("userId %s does not exists", userId)
-	}
-	openOrders := handler.Ex.RetrieveOpenOrdersForUsers(user.GetUserId())
 	openOrderResponseArray := make([]OrderResponse, 0)
-	for _, order := range openOrders {
+	for _, order := range user.OpenOrders {
 		response := OrderResponse{
 			UserId:    order.GetUserId(),
 			Size:      order.GetSize(),

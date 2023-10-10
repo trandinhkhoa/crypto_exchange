@@ -115,9 +115,9 @@ func StartServer(freshstart bool, port int, serverStarted chan bool) {
 	lastTradeRepoImpl := controllers.NewLastTradesRepoImpl(dbHandler)
 	ex.LastTradesRepo = lastTradeRepoImpl
 
-	// TODO: resolve this circular dependency
-	apiHandler := controllers.NewWebServiceHandler(ex)
-	ex.Notifier = apiHandler
+	notifyUserImpl := controllers.NewNotifyUserImpl()
+	ex.Notifier = notifyUserImpl
+	apiHandler := controllers.NewWebServiceHandler(ex, notifyUserImpl)
 
 	// initial database setup
 	if freshstart {

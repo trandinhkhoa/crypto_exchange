@@ -9,7 +9,7 @@ import (
 )
 
 type NotifyUser interface {
-	Notify(string)
+	Notify(*entities.User)
 }
 
 type Ticker string
@@ -110,9 +110,10 @@ func (ex *Exchange) PlaceLimitOrderAndPersist(o entities.Order) {
 
 	ex.orderbooksMap[ticker].PlaceLimitOrder(o)
 
+	// TODO: persist should be async
 	// go ex.persistAfterLimitOrder(o)
 	ex.persistAfterLimitOrder(o)
-	ex.Notifier.Notify(o.GetUserId())
+	ex.Notifier.Notify(user)
 }
 
 func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
@@ -165,14 +166,15 @@ func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
 		}).Info("Order Executed")
 	}
 
+	// TODO: persist should be async
 	// go ex.persistAfterMarketOrder(tradesArray)
 	ex.persistAfterMarketOrder(tradesArray)
 
 	for _, trade := range tradesArray {
-		buyer := trade.GetBuyer()
-		seller := trade.GetSeller()
-		ex.Notifier.Notify(buyer.GetUserId())
-		ex.Notifier.Notify(seller.GetUserId())
+		buyer := ex.usersMap[trade.GetBuyer().GetUserId()]
+		seller := ex.usersMap[trade.GetSeller().GetUserId()]
+		ex.Notifier.Notify(buyer)
+		ex.Notifier.Notify(seller)
 	}
 
 	return tradesArray
@@ -235,7 +237,7 @@ func (ex *Exchange) CancelOrder(orderId int64, ticker string) {
 		user.Balance[ticker1] += size
 	}
 	delete(user.OpenOrders, orderId)
-	ex.Notifier.Notify(userId)
+	ex.Notifier.Notify(user)
 }
 
 func (ex *Exchange) persistAfterLimitOrder(order entities.Order) {
