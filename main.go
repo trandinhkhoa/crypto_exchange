@@ -102,9 +102,9 @@ func StartServer(freshstart bool, port int, serverStarted chan bool) {
 
 	// client, err := ethclient.Dial("http://localhost:8545")
 
+	// injections of implementations
 	ex := usecases.NewExchange()
 
-	// injections of implementations
 	dbHandler := infrastructure.NewSqliteDbHandler("./real.db")
 	defer dbHandler.Close()
 
@@ -115,13 +115,14 @@ func StartServer(freshstart bool, port int, serverStarted chan bool) {
 	lastTradeRepoImpl := controllers.NewLastTradesRepoImpl(dbHandler)
 	ex.LastTradesRepo = lastTradeRepoImpl
 
-	apiHandler := controllers.WebServiceHandler{}
-	apiHandler.Ex = ex
+	// TODO: resolve this circular dependency
+	apiHandler := controllers.NewWebServiceHandler(ex)
+	ex.Notifier = apiHandler
 
 	// initial database setup
 	if freshstart {
 		initialTablesSetup(dbHandler)
-		createSomeUsers(&apiHandler)
+		createSomeUsers(apiHandler)
 	} else {
 		ex.Recover()
 	}

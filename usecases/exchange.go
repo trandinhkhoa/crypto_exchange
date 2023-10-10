@@ -8,6 +8,10 @@ import (
 	"github.com/trandinhkhoa/crypto-exchange/entities"
 )
 
+type NotifyUser interface {
+	Notify(string)
+}
+
 type Ticker string
 
 const (
@@ -27,6 +31,7 @@ type Exchange struct {
 	// TODO: OrdersRepo and LastsTradesRepo belong to /entities
 	OrdersRepo     OrdersRepository
 	LastTradesRepo LastTradesRepository
+	Notifier       NotifyUser
 }
 
 func NewExchange() *Exchange {
@@ -105,7 +110,9 @@ func (ex *Exchange) PlaceLimitOrderAndPersist(o entities.Order) {
 
 	ex.orderbooksMap[ticker].PlaceLimitOrder(o)
 
-	go ex.persistAfterLimitOrder(o)
+	// go ex.persistAfterLimitOrder(o)
+	ex.persistAfterLimitOrder(o)
+	ex.Notifier.Notify(o.GetUserId())
 }
 
 func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
@@ -142,13 +149,13 @@ func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
 		if trade.GetBuyer().GetOrderType() == entities.MarketOrderType {
 			// taker is buyer
 			buyer.Balance[ticker2] -= trade.GetSize() * trade.GetPrice()
-			delete(seller.OpenOrders, trade.GetBuyer().GetId())
+			delete(seller.OpenOrders, trade.GetSeller().GetId())
 		}
 
 		if trade.GetSeller().GetOrderType() == entities.MarketOrderType {
 			// taker is seller
 			seller.Balance[ticker1] -= trade.GetSize()
-			delete(buyer.OpenOrders, trade.GetSeller().GetId())
+			delete(buyer.OpenOrders, trade.GetBuyer().GetId())
 		}
 		// TODO: john's limit order might be filled (here) at the same time as he is placing a new limit order
 		// -> concurrent write
@@ -158,7 +165,15 @@ func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
 		}).Info("Order Executed")
 	}
 
-	go ex.persistAfterMarketOrder(tradesArray)
+	// go ex.persistAfterMarketOrder(tradesArray)
+	ex.persistAfterMarketOrder(tradesArray)
+
+	for _, trade := range tradesArray {
+		buyer := trade.GetBuyer()
+		seller := trade.GetSeller()
+		ex.Notifier.Notify(buyer.GetUserId())
+		ex.Notifier.Notify(seller.GetUserId())
+	}
 
 	return tradesArray
 }
@@ -220,6 +235,7 @@ func (ex *Exchange) CancelOrder(orderId int64, ticker string) {
 		user.Balance[ticker1] += size
 	}
 	delete(user.OpenOrders, orderId)
+	ex.Notifier.Notify(userId)
 }
 
 func (ex *Exchange) persistAfterLimitOrder(order entities.Order) {

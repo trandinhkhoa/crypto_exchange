@@ -61,12 +61,14 @@ type PlaceOrderRequest struct {
 }
 
 type WebServiceHandler struct {
-	Ex *usecases.Exchange
+	Ex         *usecases.Exchange
+	wsConnPool map[string]*websocket.Conn
 }
 
 func NewWebServiceHandler(ex *usecases.Exchange) *WebServiceHandler {
 	handler := WebServiceHandler{}
 	handler.Ex = ex
+	handler.wsConnPool = make(map[string]*websocket.Conn, 0)
 	return &handler
 }
 
@@ -331,40 +333,79 @@ func (handler WebServiceHandler) HandleGetUser(c echo.Context) error {
 	return c.JSON(200, user)
 }
 
-func (handler WebServiceHandler) WebSocketHandlerUserInfo(ws *websocket.Conn) {
+func (handler *WebServiceHandler) WebSocketHandlerUserInfo(ws *websocket.Conn) {
 	userId := ws.Request().URL.Query().Get("userId")
+	handler.wsConnPool[userId] = ws
 
-	// TODO : only send back these info when there is actually an update
+	user, ok := handler.Ex.GetUsersMap()[userId]
+	if !ok {
+		logrus.Debugf("userId %s does not exists", userId)
+	}
+	openOrders := handler.Ex.RetrieveOpenOrdersForUsers(user.GetUserId())
+	openOrderResponseArray := make([]OrderResponse, 0)
+	for _, order := range openOrders {
+		response := OrderResponse{
+			UserId:    order.GetUserId(),
+			Size:      order.GetSize(),
+			Price:     order.GetLimitPrice(),
+			Timestamp: order.GetTimeStamp(),
+			IsBid:     order.GetIsBid(),
+			ID:        int(order.GetId()),
+		}
+		openOrderResponseArray = append(openOrderResponseArray, response)
+	}
+	userResponse := &UserResponse{
+		UserId:     user.GetUserId(),
+		Balance:    user.Balance,
+		OpenOrders: openOrderResponseArray,
+	}
+
+	jsonResponse, _ := json.Marshal(userResponse)
+
+	if err := websocket.Message.Send(ws, string(jsonResponse)); err != nil {
+		fmt.Println("Can't send:", err)
+	}
+	// keep connection open
 	for {
-		user, ok := handler.Ex.GetUsersMap()[userId]
-		if !ok {
-			logrus.Debugf("userId %s does not exists", userId)
-		}
-		openOrders := handler.Ex.RetrieveOpenOrdersForUsers(user.GetUserId())
-		openOrderResponseArray := make([]OrderResponse, 0)
-		for _, order := range openOrders {
-			response := OrderResponse{
-				UserId:    order.GetUserId(),
-				Size:      order.GetSize(),
-				Price:     order.GetLimitPrice(),
-				Timestamp: order.GetTimeStamp(),
-				IsBid:     order.GetIsBid(),
-				ID:        int(order.GetId()),
-			}
-			openOrderResponseArray = append(openOrderResponseArray, response)
-		}
-		userResponse := &UserResponse{
-			UserId:     user.GetUserId(),
-			Balance:    user.Balance,
-			OpenOrders: openOrderResponseArray,
-		}
+		time.Sleep(100 * time.Second)
+	}
+}
 
-		jsonResponse, _ := json.Marshal(userResponse)
+// type NotifyUserImpl struct {
+// 	Handler *WebServiceHandler
+// }
 
-		if err := websocket.Message.Send(ws, string(jsonResponse)); err != nil {
-			fmt.Println("Can't send:", err)
-			break
+func (handler *WebServiceHandler) Notify(userId string) {
+	wsConn, ok := handler.wsConnPool[userId]
+	if !ok {
+		return
+	}
+	user, ok := handler.Ex.GetUsersMap()[userId]
+	if !ok {
+		logrus.Debugf("userId %s does not exists", userId)
+	}
+	openOrders := handler.Ex.RetrieveOpenOrdersForUsers(user.GetUserId())
+	openOrderResponseArray := make([]OrderResponse, 0)
+	for _, order := range openOrders {
+		response := OrderResponse{
+			UserId:    order.GetUserId(),
+			Size:      order.GetSize(),
+			Price:     order.GetLimitPrice(),
+			Timestamp: order.GetTimeStamp(),
+			IsBid:     order.GetIsBid(),
+			ID:        int(order.GetId()),
 		}
-		time.Sleep(500 * time.Millisecond)
+		openOrderResponseArray = append(openOrderResponseArray, response)
+	}
+	userResponse := &UserResponse{
+		UserId:     user.GetUserId(),
+		Balance:    user.Balance,
+		OpenOrders: openOrderResponseArray,
+	}
+
+	jsonResponse, _ := json.Marshal(userResponse)
+
+	if err := websocket.Message.Send(wsConn, string(jsonResponse)); err != nil {
+		logrus.Error("Can't send notif to user through websocket:", err)
 	}
 }
