@@ -95,6 +95,7 @@ func createSomeUsers(apiHandler *controllers.WebServiceHandler) {
 
 func StartServer(freshstart bool, port int, serverStarted chan bool) {
 	e := echo.New()
+	// allow all origins just for testing
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{echo.GET, echo.HEAD, echo.PUT, echo.PATCH, echo.POST, echo.DELETE},
@@ -115,9 +116,7 @@ func StartServer(freshstart bool, port int, serverStarted chan bool) {
 	lastTradeRepoImpl := controllers.NewLastTradesRepoImpl(dbHandler)
 	ex.LastTradesRepo = lastTradeRepoImpl
 
-	notifyUserImpl := controllers.NewNotifyUserImpl()
-	ex.Notifier = notifyUserImpl
-	apiHandler := controllers.NewWebServiceHandler(ex, notifyUserImpl)
+	apiHandler := controllers.NewWebServiceHandler(ex)
 
 	// initial database setup
 	if freshstart {
@@ -172,7 +171,6 @@ func main() {
 		ExchangeServer: "http://localhost:" + fmt.Sprintf("%d", port),
 	}
 	go marketMaker.MakeMarket()
-	// go client.PlaceLimitFromFile()
 	marketParticipant := &client.Client{
 		ExchangeServer: "http://localhost:" + fmt.Sprintf("%d", port),
 	}

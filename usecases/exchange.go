@@ -8,10 +8,6 @@ import (
 	"github.com/trandinhkhoa/crypto-exchange/entities"
 )
 
-type NotifyUser interface {
-	Notify(*entities.User)
-}
-
 type Ticker string
 
 const (
@@ -31,7 +27,6 @@ type Exchange struct {
 	// TODO: OrdersRepo and LastsTradesRepo belong to /entities
 	OrdersRepo     OrdersRepository
 	LastTradesRepo LastTradesRepository
-	Notifier       NotifyUser
 }
 
 func NewExchange() *Exchange {
@@ -113,7 +108,6 @@ func (ex *Exchange) PlaceLimitOrderAndPersist(o entities.Order) {
 	// TODO: persist should be async
 	// go ex.persistAfterLimitOrder(o)
 	ex.persistAfterLimitOrder(o)
-	ex.Notifier.Notify(user)
 }
 
 func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
@@ -170,13 +164,6 @@ func (ex *Exchange) PlaceMarketOrder(o entities.Order) []entities.Trade {
 	// go ex.persistAfterMarketOrder(tradesArray)
 	ex.persistAfterMarketOrder(tradesArray)
 
-	for _, trade := range tradesArray {
-		buyer := ex.usersMap[trade.GetBuyer().GetUserId()]
-		seller := ex.usersMap[trade.GetSeller().GetUserId()]
-		ex.Notifier.Notify(buyer)
-		ex.Notifier.Notify(seller)
-	}
-
 	return tradesArray
 }
 
@@ -224,7 +211,7 @@ func (ex *Exchange) GetBestSell(ticker string) float64 {
 	return ex.orderbooksMap[Ticker(ticker)].LowestSell.GetLimitPrice()
 }
 
-func (ex *Exchange) CancelOrder(orderId int64, ticker string) {
+func (ex *Exchange) CancelOrder(orderId int64, ticker string) *entities.User {
 	orderbook := ex.orderbooksMap[Ticker(ticker)]
 	userId, isBid, price, size := orderbook.CancelOrder(orderId)
 	user := ex.usersMap[userId]
@@ -237,7 +224,8 @@ func (ex *Exchange) CancelOrder(orderId int64, ticker string) {
 		user.Balance[ticker1] += size
 	}
 	delete(user.OpenOrders, orderId)
-	ex.Notifier.Notify(user)
+
+	return user
 }
 
 func (ex *Exchange) persistAfterLimitOrder(order entities.Order) {

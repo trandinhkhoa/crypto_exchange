@@ -1,6 +1,6 @@
 # Implementation of a Simple Crypto Exchange
 - For learning Go + trading engine
-- Orders matched uing Price-Time Priority
+- Orders matched using Price-Time Priority
 - Execution here is just users' balance management
     - For now there is balance udpate but no balance check
 - Simple market making
@@ -16,7 +16,7 @@ make build
 make test
 ```
 
-# Test
+# Demo
 - Run
     - use `-freshstart=true` if this is first launch of the application. Otherwise it will  continue from a saved state in the database
 ```
@@ -26,8 +26,7 @@ make run ARGS="-freshstart=false -port=3000"
 https://github.com/trandinhkhoa/crypto_exchange_frontend
     - The frontend (hardcoded to run at port `8080`) is already hardcoded to connect to port `3000`.
 
-# Demo
-Demo with the Front-end mentioned above
+- Demo with the Front-end mentioned above
 
 ![](readmeImages/demo.gif)
 

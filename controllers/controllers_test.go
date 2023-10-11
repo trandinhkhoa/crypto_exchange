@@ -94,6 +94,7 @@ func TestControllersHandlePlaceOrder(t *testing.T) {
 			"ETH": 2000.0,
 			"USD": 2000.0,
 		})
+
 	handler := controllers.NewWebServiceHandler(ex)
 	// TODO: return error if request body is not in correct format .e.g wrong json field name
 	if assert.NoError(t, handler.HandlePlaceOrder(c)) {

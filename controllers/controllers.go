@@ -61,14 +61,14 @@ type PlaceOrderRequest struct {
 }
 
 type WebServiceHandler struct {
-	Ex             *usecases.Exchange
-	notifyUserImpl *NotifyUserImpl
+	Ex         *usecases.Exchange
+	wsConnPool map[string]*websocket.Conn
 }
 
-func NewWebServiceHandler(ex *usecases.Exchange, notifyUserImpl *NotifyUserImpl) *WebServiceHandler {
+func NewWebServiceHandler(ex *usecases.Exchange) *WebServiceHandler {
 	handler := WebServiceHandler{}
 	handler.Ex = ex
-	handler.notifyUserImpl = notifyUserImpl
+	handler.wsConnPool = make(map[string]*websocket.Conn, 0)
 	return &handler
 }
 
@@ -106,10 +106,17 @@ func (handler WebServiceHandler) HandlePlaceOrder(c echo.Context) error {
 				IsBuyerMaker: trade.GetIsBuyerMaker(),
 			}
 			tradesDataArray = append(tradesDataArray, *tradeData)
+
+			buyer := handler.Ex.GetUsersMap()[trade.GetBuyer().GetUserId()]
+			seller := handler.Ex.GetUsersMap()[trade.GetSeller().GetUserId()]
+			handler.Notify(&buyer)
+			handler.Notify(&seller)
 		}
 		return c.JSON(200, map[string]interface{}{"matches": tradesDataArray})
 	} else {
 		handler.Ex.PlaceLimitOrderAndPersist(*incomingOrder)
+		user := handler.Ex.GetUsersMap()[incomingOrder.GetUserId()]
+		handler.Notify(&user)
 		return c.JSON(200, map[string]interface{}{
 			"msg": "limit order placed",
 			"order": OrderResponse{
@@ -197,6 +204,7 @@ func (handler WebServiceHandler) HandleGetBestBid(c echo.Context) error {
 	})
 }
 
+// TODO: this + place order should have user info in the request body/header
 func (handler WebServiceHandler) HandleCancelOrder(c echo.Context) error {
 	orderId, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -205,7 +213,8 @@ func (handler WebServiceHandler) HandleCancelOrder(c echo.Context) error {
 		})
 	}
 	ticker := c.Param("ticker")
-	handler.Ex.CancelOrder(int64(orderId), ticker)
+	user := handler.Ex.CancelOrder(int64(orderId), ticker)
+	handler.Notify(user)
 	return c.JSON(200, map[string]interface{}{
 		"msg": "order cancelled",
 	})
@@ -335,7 +344,7 @@ func (handler WebServiceHandler) HandleGetUser(c echo.Context) error {
 
 func (handler *WebServiceHandler) WebSocketHandlerUserInfo(ws *websocket.Conn) {
 	userId := ws.Request().URL.Query().Get("userId")
-	handler.notifyUserImpl.wsConnPool[userId] = ws
+	handler.wsConnPool[userId] = ws
 
 	user, ok := handler.Ex.GetUsersMap()[userId]
 	if !ok {
@@ -366,23 +375,14 @@ func (handler *WebServiceHandler) WebSocketHandlerUserInfo(ws *websocket.Conn) {
 		fmt.Println("Can't send:", err)
 	}
 	// keep connection open
+	// TODO: close when user logout
 	for {
 		time.Sleep(100 * time.Second)
 	}
 }
 
-type NotifyUserImpl struct {
-	wsConnPool map[string]*websocket.Conn
-}
-
-func NewNotifyUserImpl() *NotifyUserImpl {
-	return &NotifyUserImpl{
-		wsConnPool: make(map[string]*websocket.Conn, 0),
-	}
-}
-
-func (notifyUserImpl *NotifyUserImpl) Notify(user *entities.User) {
-	wsConn, ok := notifyUserImpl.wsConnPool[user.GetUserId()]
+func (handler *WebServiceHandler) Notify(user *entities.User) {
+	wsConn, ok := handler.wsConnPool[user.GetUserId()]
 	if !ok {
 		// user is not connected.
 		return
